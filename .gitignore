@@ -1,0 +1,6 @@
+node_modules/
+dist/
+_v2backup/
+.DS_Store
+*.p12
+*.log

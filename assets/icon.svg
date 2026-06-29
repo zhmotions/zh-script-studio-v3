@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Word Viewer Panel icon">
+  <rect width="128" height="128" rx="18" fill="#2f6fed"/>
+  <path d="M36 20h40l22 22v66H36z" fill="#fff"/>
+  <path d="M76 20v24h22z" fill="#d8e5ff"/>
+  <path d="M47 57h40v7H47zm0 16h40v7H47zm0 16h28v7H47z" fill="#254061"/>
+  <path d="M23 43h45v49H23z" fill="#185abd"/>
+  <path d="M35 57h7l5 21 6-21h7l-9 28h-7l-5-20-5 20h-7z" fill="#fff"/>
+</svg>

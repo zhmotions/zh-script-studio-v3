@@ -1,0 +1,22 @@
+{
+  "name": "zh-script-studio",
+  "version": "2.0.0",
+  "private": true,
+  "description": "ZH Script Studio — send Word script text to the Premiere Pro / After Effects timeline as captions, batch subtitles, or markers.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package:zxp": "node scripts/package-zxp.mjs",
+    "test:static": "node scripts/static-check.mjs"
+  },
+  "engines": {
+    "node": ">=17.7.1"
+  },
+  "vendoredDependencies": {
+    "docx-preview": "0.3.7",
+    "dompurify": "3.4.11",
+    "jszip": "3.10.1",
+    "mammoth": "1.12.0",
+    "CSInterface": "Adobe CEP 12.0.0"
+  },
+  "license": "UNLICENSED"
+}

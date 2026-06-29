@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://zhmotions.com https://www.zhmotions.com https://api-relay.zhmotionspanel.workers.dev; media-src 'self' data: blob: https://zhmotions.com https://www.zhmotions.com https://api-relay.zhmotionspanel.workers.dev; connect-src https://www.zhmotions.com https://zhmotions.com https://api-relay.zhmotionspanel.workers.dev; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZH Script Studio</title>
+    <link rel="stylesheet" href="./css/styles.css">
+  </head>
+  <body>
+    <!-- ▸ LICENSE GATE — panel will not open without a valid key -->
+    <div id="licenseGate" class="license-gate">
+      <div class="license-card">
+        <img class="brand-logo big" src="./assets/img/zh-icon.png" alt="ZH Motions" width="64" height="64">
+        <h1>ZH Script Studio</h1>
+        <p class="license-sub">Enter your license key to activate. One key works on up to 3 devices.</p>
+        <input id="licenseKeyInput" type="text" placeholder="ZHM-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+        <button id="licenseActivateBtn" class="license-btn" type="button">Activate</button>
+        <div id="licenseMsg" class="license-msg" role="status" aria-live="polite"></div>
+        <a class="license-buy" href="https://www.zhmotions.com" target="_blank" rel="noopener">Need a key? Get one at zhmotions.com</a>
+      </div>
+    </div>
+
+    <div class="app-shell">
+      <!-- ▸ HEADER -->
+      <header class="v3-top">
+        <div class="v3-brand">
+          <span class="v3-logo">ZH</span>
+          <span class="v3-name">Script Studio</span>
+        </div>
+        <div class="v3-top-right">
+          <span id="hostBadge" class="host-badge">zhmotions.com</span>
+          <label class="theme-switch" title="Toggle dark mode">
+            <input id="themeToggleInput" type="checkbox" aria-label="Dark mode">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+          <button id="toolsButton" class="v3-iconbtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="toolsMenu" title="Display settings">⚙</button>
+          <button id="helpButton" class="v3-iconbtn" type="button" title="Help, Terms & License" aria-label="Help">?</button>
+        </div>
+      </header>
+
+      <!-- ▸ DOCUMENT TOOLBAR -->
+      <div class="v3-toolbar">
+        <button id="openButton" class="v3-fab" type="button" title="Open a script (.docx / .txt / .srt)">📂 Open</button>
+        <div class="v3-find">
+          <span>🔍</span>
+          <input id="searchInput" type="search" placeholder="Find in script…" autocomplete="off">
+          <span id="searchCount" class="muted">0/0</span>
+          <button id="prevSearchButton" class="v3-mini" type="button" aria-label="Previous match">↑</button>
+          <button id="nextSearchButton" class="v3-mini" type="button" aria-label="Next match">↓</button>
+        </div>
+        <button id="editButton" class="v3-iconbtn" type="button" title="Edit the script text (fix typos)">✏️</button>
+        <button id="saveButton" class="v3-iconbtn" type="button" title="Save your edits back to the file" hidden>💾</button>
+        <button id="closeDocButton" class="v3-iconbtn" type="button" title="Close the current script">✕</button>
+      </div>
+
+      <!-- ▸ DOCUMENT (always visible — select text here) -->
+      <main class="v3-stage">
+        <div id="statusMessage" class="status-message" role="status" aria-live="polite"></div>
+        <div id="documentViewport" class="document-viewport">
+          <article id="documentSurface" class="document-surface empty-state">
+            <div class="v3-empty">
+              <div class="v3-empty-ic">📄</div>
+              <p><strong>Open a script to start</strong></p>
+              <p class="muted">.docx · .txt · .srt — read it, select text, turn it into titles or captions.</p>
+            </div>
+            <div id="recentFiles" class="recent-files"></div>
+          </article>
+        </div>
+      </main>
+
+      <!-- ▸ DOCK — tabbed action panel -->
+      <footer class="v3-dock">
+        <div id="templateName" class="template-name" hidden></div>
+
+        <nav class="v3-tabs" role="tablist">
+          <button class="v3-tab active" data-dock="titles" type="button">✨ Titles</button>
+          <button class="v3-tab" data-dock="captions" type="button">💬 Captions</button>
+          <button class="v3-tab" data-dock="templates" type="button">🎬 Templates</button>
+        </nav>
+
+        <!-- DOCK: TITLES -->
+        <section class="v3-pane active" data-dockpane="titles">
+          <div class="v3-selbar"><span class="v3-dot"></span><span class="dock-label">Acts on selected script text</span></div>
+          <div class="v3-actiongrid">
+            <button id="captionButton" class="button accent" type="button" title="Insert selected text as an editable animated title at the playhead">＋ Title</button>
+            <button id="batchButton" class="button accent" type="button" title="Insert every selected line as sequential titles">≣ Batch</button>
+            <button id="markerButton" class="button" type="button" title="Add selected text as a timeline marker">⚑ Marker</button>
+            <button id="copySelectionButton" class="button" type="button" title="Copy selected text">⧉ Copy</button>
+          </div>
+          <div class="v3-optrow">
+            <label class="dur-field" title="Seconds each title stays on screen"><span>Dur</span><input id="durationInput" type="number" min="0.5" max="60" step="0.5" value="4"><span class="dur-unit">s</span></label>
+            <button id="animatedToggle" class="button" type="button" aria-pressed="false" title="ON = animated title">✨ Animated: Off</button>
+            <button id="aeStyleBtn" class="button" type="button" title="After Effects animation style (click to cycle)" hidden>🎞 Style: Pop</button>
+          </div>
+          <div class="v3-optrow">
+            <button id="templateButton" class="button ghost-btn" type="button" title="Add your own .mogrt / .ffx">🎬 Template</button>
+            <button id="onlineTemplateButton" class="button ghost-btn" type="button" title="Browse online templates">🌐 Online</button>
+          </div>
+          <div class="sel-color-row">
+            <span class="dock-label" title="Select text in the script, then click a colour">🎨 Mark text</span>
+            <div class="swatches sel-swatches">
+              <button type="button" class="swatch" data-selcolor="#e0303a" style="background:#e0303a" title="Red"></button>
+              <button type="button" class="swatch" data-selcolor="#d4a017" style="background:#d4a017" title="Gold"></button>
+              <button type="button" class="swatch" data-selcolor="#7A1F2B" style="background:#7A1F2B" title="Maroon"></button>
+              <button type="button" class="swatch" data-selcolor="#2563eb" style="background:#2563eb" title="Blue"></button>
+              <button type="button" class="swatch" data-selcolor="#16a34a" style="background:#16a34a" title="Green"></button>
+              <button type="button" class="swatch swatch-hl" data-selcolor="hl-yellow" style="background:#fff59d" title="Highlight"></button>
+              <button type="button" class="swatch" data-selcolor="reset" style="background:linear-gradient(135deg,#fff 45%,#e0303a 45%,#e0303a 55%,#fff 55%)" title="Clear colour"></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- DOCK: CAPTIONS -->
+        <section class="v3-pane" data-dockpane="captions">
+          <div class="v3-actiongrid">
+            <button id="autoSubButton" class="button accent big-action" type="button" title="Auto subtitle from the timeline audio → caption track">🎤 Auto Subtitle</button>
+            <button id="transcribeButton" class="button" type="button" title="Transcribe timeline audio to editable text + .txt">📝 Transcribe</button>
+            <button id="subtitleButton" class="button" type="button" title="Generate subtitles from the open script text">💬 From script</button>
+            <span id="quotaBadge" class="quota-badge" title="Your Auto Subtitle minutes this month" hidden></span>
+          </div>
+          <div class="wpc-group" title="Spoken language in the video (recognition)">
+            <span>Spoken</span>
+            <input id="subLang" type="hidden" value="bn-BD">
+            <button type="button" class="lang-btn active" data-lang="bn-BD">বাংলা</button>
+            <button type="button" class="lang-btn" data-lang="en-US">EN</button>
+            <button type="button" class="lang-btn" data-lang="auto">Auto</button>
+            <button type="button" class="lang-btn" data-lang="hi-IN">हिन्दी</button>
+            <button type="button" class="lang-btn" data-lang="ur-PK">اردو</button>
+            <button type="button" class="lang-btn" data-lang="ar-EG">عربى</button>
+            <button type="button" class="lang-btn" data-lang="es-ES">ES</button>
+          </div>
+          <div class="wpc-group" title="Translate the subtitles to another language (keeps timing)">
+            <span>Translate</span>
+            <input id="subTranslate" type="hidden" value="">
+            <button type="button" class="tl-btn active" data-tl="">Off</button>
+            <button type="button" class="tl-btn" data-tl="bn">বাংলা</button>
+            <button type="button" class="tl-btn" data-tl="en">EN</button>
+            <button type="button" class="tl-btn" data-tl="hi">हिन्दी</button>
+            <button type="button" class="tl-btn" data-tl="ur">اردو</button>
+            <button type="button" class="tl-btn" data-tl="ar">عربى</button>
+            <button type="button" class="tl-btn" data-tl="es">ES</button>
+          </div>
+          <div class="wpc-group" title="Words per caption — 1 = TikTok/karaoke style">
+            <span>Words / line</span>
+            <input id="wordsPerCue" type="hidden" value="0">
+            <button type="button" class="wpc-btn active" data-wpc="0">Auto</button>
+            <button type="button" class="wpc-btn" data-wpc="1">1 · karaoke</button>
+            <button type="button" class="wpc-btn" data-wpc="2">2</button>
+            <button type="button" class="wpc-btn" data-wpc="3">3</button>
+          </div>
+          <div class="wpc-group v3-stylegroup" title="Animation style (Animated subtitles)">
+            <span>Style</span>
+            <input id="captionStyle" type="hidden" value="pop">
+            <button type="button" class="cstyle-btn active" data-style="pop">Pop</button>
+            <button type="button" class="cstyle-btn" data-style="karaoke">Karaoke</button>
+            <button type="button" class="cstyle-btn" data-style="typewriter">Type-on</button>
+            <button type="button" class="cstyle-btn" data-style="slide-up">Slide</button>
+            <button type="button" class="cstyle-btn" data-style="fade">Fade</button>
+          </div>
+          <div class="v3-bnrow">
+            <label class="v3-bntoggle" title="Paste Bijoy (legacy) Bengali → auto-convert to Unicode"><input id="bijoyToggle" type="checkbox"><span>⇄ Bijoy → Unicode</span></label>
+            <label class="v3-bntoggle" title="Show original + translated caption stacked"><input id="dualLangToggle" type="checkbox"><span>Dual বাংলা+EN</span></label>
+          </div>
+          <input id="audioInput" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a" hidden>
+        </section>
+
+        <!-- DOCK: TEMPLATES (card grid filled by app.js) -->
+        <section class="v3-pane" data-dockpane="templates">
+          <p class="muted v3-tpl-hint">Browse ready-made animations, or add your own.</p>
+          <div class="v3-optrow">
+            <button class="button accent" type="button" onclick="document.getElementById('onlineTemplateButton').click()">🌐 Browse online</button>
+            <button class="button ghost-btn" type="button" onclick="document.getElementById('templateButton').click()">＋ Add your own</button>
+          </div>
+        </section>
+      </footer>
+
+      <!-- ▸ SETTINGS (⚙) — reading appearance -->
+      <div class="tools-wrap">
+        <section id="toolsMenu" class="control-strip settings-menu settings-menu--up" aria-label="Display settings" hidden>
+          <label class="toggle-row"><input id="preserveToggle" type="checkbox"><span>Preserve document styling</span></label>
+          <label class="field"><span>Font</span>
+            <select id="fontFamilyInput">
+              <option value="Arial">Arial</option><option value="Aptos">Aptos</option>
+              <option value="Calibri">Calibri</option><option value="Georgia">Georgia</option>
+              <option value="Helvetica Neue">Helvetica Neue</option>
+              <option value="Noto Sans Bengali">Noto Sans Bengali</option>
+              <option value="Noto Serif Bengali">Noto Serif Bengali</option>
+              <option value="Times New Roman">Times New Roman</option><option value="Vrinda">Vrinda</option>
+            </select>
+          </label>
+          <label class="field compact size-field"><span>Size</span>
+            <div class="size-control">
+              <button id="fontSizeDownButton" class="button mini-button" type="button">A-</button>
+              <input id="fontSizeInput" type="number" min="8" max="96" step="1">
+              <button id="fontSizeUpButton" class="button mini-button" type="button">A+</button>
+            </div>
+          </label>
+          <label class="field compact"><span>Line</span><input id="lineHeightInput" type="number" min="1" max="3" step="0.05"></label>
+          <div class="field swatch-field"><span>Text</span>
+            <div class="swatches" data-swatch-target="textColorInput">
+              <button type="button" class="swatch" data-color="#1c1c1c" style="background:#1c1c1c"></button>
+              <button type="button" class="swatch" data-color="#ffffff" style="background:#ffffff"></button>
+              <button type="button" class="swatch" data-color="#7A1F2B" style="background:#7A1F2B"></button>
+              <button type="button" class="swatch" data-color="#d4a017" style="background:#d4a017"></button>
+              <button type="button" class="swatch" data-color="#e0303a" style="background:#e0303a"></button>
+              <button type="button" class="swatch" data-color="#2563eb" style="background:#2563eb"></button>
+              <button type="button" class="swatch" data-color="#16a34a" style="background:#16a34a"></button>
+            </div>
+            <input id="textColorInput" type="color" hidden>
+          </div>
+          <div class="field swatch-field"><span>Back</span>
+            <div class="swatches" data-swatch-target="backgroundColorInput">
+              <button type="button" class="swatch" data-color="#ffffff" style="background:#ffffff"></button>
+              <button type="button" class="swatch" data-color="#fdf6ec" style="background:#fdf6ec"></button>
+              <button type="button" class="swatch" data-color="#f2f2f2" style="background:#f2f2f2"></button>
+              <button type="button" class="swatch" data-color="#202020" style="background:#202020"></button>
+              <button type="button" class="swatch" data-color="#0f0f0f" style="background:#0f0f0f"></button>
+            </div>
+            <input id="backgroundColorInput" type="color" hidden>
+          </div>
+          <label class="field range-field"><span>Zoom</span><input id="zoomInput" type="range" min="50" max="250" step="5"><output id="zoomOutput">100%</output></label>
+        </section>
+      </div>
+
+      <!-- ▸ Help / Terms / License modal -->
+      <div id="helpOverlay" class="modal-overlay" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Help">
+          <header class="modal-head">
+            <img class="brand-logo small" src="./assets/img/zh-icon.png" alt="ZH Motions" width="30" height="30">
+            <h2>ZH Script Studio <span class="ver">v3.0</span></h2>
+            <button id="helpClose" class="help-btn" type="button" aria-label="Close">✕</button>
+          </header>
+          <div class="modal-tabs">
+            <button class="mtab active" data-tab="guide" type="button">Help Guide</button>
+            <button class="mtab" data-tab="terms" type="button">Terms</button>
+            <button class="mtab" data-tab="license" type="button">License</button>
+          </div>
+          <div class="modal-body">
+            <section data-pane="guide">
+              <h3>Quick start</h3>
+              <ol>
+                <li><strong>📂 Open</strong> — open a <code>.docx</code>, <code>.txt</code> or <code>.srt</code> script. It auto-reloads next time.</li>
+                <li>Select text in the script.</li>
+                <li><strong>✨ Titles</strong> dock — send it to your timeline.</li>
+                <li><strong>💬 Captions</strong> dock — auto-subtitle from audio, or from your script.</li>
+                <li><strong>🎬 Templates</strong> dock — browse animations.</li>
+              </ol>
+              <h3>Timeline buttons</h3>
+              <ul>
+                <li><strong>＋ Title</strong> — selected text → one editable, animated title at the playhead.</li>
+                <li><strong>≣ Batch</strong> — every selected line → its own title (each lasts <strong>Dur</strong> seconds).</li>
+                <li><strong>⚑ Marker</strong> — drops a timeline marker with the selected text as comment.</li>
+                <li><strong>⧉ Copy</strong> — copies the selection.</li>
+              </ul>
+              <h3>🎨 Mark text</h3>
+              <p>Select text, then click a colour to colour it, the yellow swatch to highlight, or the last swatch to clear.</p>
+              <h3>⚙ Display</h3>
+              <p>Font (incl. Bengali), size, line spacing, text/background colour and zoom — in reading mode.</p>
+              <h3>Works in</h3>
+              <p>Adobe Premiere Pro &amp; After Effects (25.0 and newer).</p>
+            </section>
+            <section data-pane="terms" hidden>
+              <h3>Terms &amp; Conditions</h3>
+              <p>By installing or using ZH Script Studio (“the Software”) you agree to these terms.</p>
+              <ol>
+                <li><strong>Free to use.</strong> Provided free for personal and commercial video editing.</li>
+                <li><strong>License, not sale.</strong> Non-exclusive licence; ZH Motions retains all ownership.</li>
+                <li><strong>Restrictions.</strong> No reselling, rebranding, sublicensing, or distributing as your own.</li>
+                <li><strong>Your content.</strong> Your scripts and projects remain yours; runs locally.</li>
+                <li><strong>No warranty.</strong> Provided “as is”. Keep backups.</li>
+                <li><strong>Liability.</strong> ZH Motions not liable for any damage or lost work.</li>
+                <li><strong>Third parties.</strong> Adobe, Premiere Pro, After Effects are Adobe trademarks; ZH Motions is not affiliated.</li>
+              </ol>
+              <p class="muted">Contact: zhmotions.com</p>
+            </section>
+            <section data-pane="license" hidden>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--panel-line);">
+                <div><div style="font-size:0.78rem;color:var(--panel-muted);">Your license</div><div id="licCurrent" style="font-family:monospace;color:var(--zh-gold);font-weight:700;">—</div></div>
+                <button id="changeKeyBtn" class="license-btn" type="button" style="width:auto;padding:8px 16px;margin:0;">Change key</button>
+              </div>
+              <h3>ZH Motions License</h3>
+              <p>Copyright © 2026 ZH Motions. All rights reserved.</p>
+              <p>You <strong>may</strong>: use on your machines, in paid client work, and share the original installer.</p>
+              <p>You <strong>may not</strong>: sell the Software, claim it as your own, remove branding, or redistribute modified copies.</p>
+              <p>THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND.</p>
+              <p class="muted">ZH Script Studio v3.0 · zhmotions.com</p>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <input id="fileInput" type="file" accept=".docx,.txt,.srt" hidden>
+      <input id="templateInput" type="file" accept=".mogrt,.ffx" hidden>
+    </div>
+
+    <script src="./js/lib/CSInterface.js"></script>
+    <script src="./vendor/purify.min.js"></script>
+    <script src="./vendor/jszip.min.js"></script>
+    <script src="./vendor/docx-preview.min.js"></script>
+    <script src="./vendor/mammoth.browser.min.js"></script>
+    <script src="./js/v3-ui.js"></script>
+    <script src="./js/v3-features.js"></script>
+    <script src="./js/app.js"></script>
+  </body>
+</html>
