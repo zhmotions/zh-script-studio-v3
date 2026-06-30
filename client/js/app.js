@@ -72,7 +72,7 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.5.9";
+  var EXT_VERSION = "4.0.0";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
