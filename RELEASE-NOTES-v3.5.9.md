@@ -1,4 +1,4 @@
-# ZH Script Studio v3.5.8
+# ZH Script Studio v3.5.9
 
 First non-beta release.
 
@@ -24,3 +24,6 @@ First non-beta release.
 
 ## v3.5.8
 - Active/applied online templates keep their animated video preview (was lost when a template became active).
+
+## v3.5.9
+- Title-template chip now shows the animated video preview too (was image-only; video-only templates showed nothing when active/hovered).

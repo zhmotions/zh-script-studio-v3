@@ -72,7 +72,7 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.5.8";
+  var EXT_VERSION = "3.5.9";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
@@ -1837,7 +1837,7 @@
   }
 
   // Add a picked .mogrt to the SAVED list (no duplicates) + make it active. Persists across reopens.
-  function setTitleTemplate(path, name, previewUrl) {
+  function setTitleTemplate(path, name, previewUrl, isVideo) {
     // Pickers (esp. CEP showOpenDialog) can hand back a file:// URL with %20-encoded
     // spaces. ExtendScript's File() needs a plain POSIX path, so normalize before we
     // store it — otherwise the saved template never resolves and apply falls to default.
@@ -1846,9 +1846,9 @@
     if (!Array.isArray(state.prefs.savedTemplates)) state.prefs.savedTemplates = [];
     var exists = false;
     for (var i = 0; i < state.prefs.savedTemplates.length; i += 1) {
-      if (state.prefs.savedTemplates[i].path === path) { exists = true; if (previewUrl) state.prefs.savedTemplates[i].preview = previewUrl; break; }
+      if (state.prefs.savedTemplates[i].path === path) { exists = true; if (previewUrl) { state.prefs.savedTemplates[i].preview = previewUrl; state.prefs.savedTemplates[i].isVideo = !!isVideo; } break; }
     }
-    if (!exists) state.prefs.savedTemplates.push({ path: path, name: name || basename(path), preview: previewUrl || "" });
+    if (!exists) state.prefs.savedTemplates.push({ path: path, name: name || basename(path), preview: previewUrl || "", isVideo: !!isVideo });
     state.prefs.activeTemplatePath = path;
     savePreferences();
     renderTitleTemplate();
@@ -2002,8 +2002,10 @@
         var buf = nr("buffer").Buffer.from(new Uint8Array(x.response));
         var dest = nr("path").join(dir, file);
         nr("fs").writeFileSync(dest, buf);
-        var pvUrl = t.preview ? tplAssetUrl(t.preview) : "";
-        setTitleTemplate(dest, t.name || file.replace(/\.[^.]+$/, ""), pvUrl);   // save + activate (+ preview for hover)
+        // Prefer the still image; fall back to the animated video so a video-only template still
+        // carries a hover preview on its title chip.
+        var pvUrl = t.preview ? tplAssetUrl(t.preview) : (t.previewVideo ? tplAssetUrl(t.previewVideo) : "");
+        setTitleTemplate(dest, t.name || file.replace(/\.[^.]+$/, ""), pvUrl, !t.preview && !!t.previewVideo);   // save + activate (+ preview for hover)
       } catch (e) { showStatus("Couldn't save the template: " + e.message, true); }
     };
     x.onerror = x.ontimeout = function () { grabTemplateFile(bases, idx + 1, file, t, dir, nr); };
@@ -2037,7 +2039,7 @@
     });
     saved.forEach(function (t) {
       html += '<button type="button" class="tpl-chip' + (active === t.path ? " active" : "") + '" data-tpl="' +
-        escapeHtml(t.path) + '"' + (t.preview ? ' data-preview="' + escapeHtml(t.preview) + '"' : '') + '>' + escapeHtml(t.name) +
+        escapeHtml(t.path) + '"' + (t.preview ? ' data-preview="' + escapeHtml(t.preview) + '"' + (t.isVideo ? ' data-video="1"' : '') : '') + '>' + escapeHtml(t.name) +
         '<span class="tpl-x" data-rm="' + escapeHtml(t.path) + '">✕</span></button>';
     });
     els.templateName.innerHTML = html;
@@ -2050,7 +2052,8 @@
       });
       var pv = chip.getAttribute("data-preview");
       if (pv) {
-        chip.addEventListener("mousemove", function (e) { ssHoverPreview(pv, e.clientX, e.clientY); });
+        var pvVid = chip.getAttribute("data-video") === "1";
+        chip.addEventListener("mousemove", function (e) { ssHoverPreview(pv, e.clientX, e.clientY, pvVid); });
         chip.addEventListener("mouseleave", function () { ssHidePreview(); });
       }
     });
