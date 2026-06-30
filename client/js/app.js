@@ -72,7 +72,7 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.5.6";
+  var EXT_VERSION = "3.5.7";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
@@ -2102,7 +2102,7 @@
       var thumb = it.preview
         ? '<img src="' + escapeHtml(it.preview) + '" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'🎬\'">'
         : ((it.isVideo && it.hover)   // no still image but a video preview → loop it as the thumbnail
-            ? '<video src="' + escapeHtml(it.hover) + '" muted loop autoplay playsinline style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'🎬\'"></video>'
+            ? '<video src="' + escapeHtml(it.hover) + '" muted loop autoplay playsinline preload="auto" style="width:100%;height:100%;object-fit:cover" onloadeddata="try{this.play()}catch(e){}" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'🎬\'"></video>'
             : '🎬');
       var addBtn = it.online
         ? '<button type="button" class="tplx-add" data-dl="' + i + '">Add ↓</button>'

@@ -1,4 +1,4 @@
-# ZH Script Studio v3.5.6
+# ZH Script Studio v3.5.7
 
 First non-beta release.
 
@@ -18,3 +18,6 @@ First non-beta release.
 ## Distribution
 - Download is now a **.zip** (holds the .zxp + install readme) so Mac cleaners / Gatekeeper stop deleting the raw .zxp
 - License emails link to the zip; bundle keys list a download button per app
+
+## v3.5.7
+- Online template video previews now actually play in the card (CEF muted-autoplay enabled).

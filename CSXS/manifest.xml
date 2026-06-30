@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionManifest Version="7.0"
     ExtensionBundleId="com.zhmotions.scriptstudio"
-    ExtensionBundleVersion="3.5.6"
+    ExtensionBundleVersion="3.5.7"
     ExtensionBundleName="ZH Script Studio"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.zhmotions.scriptstudio" Version="3.5.6" />
+    <Extension Id="com.zhmotions.scriptstudio" Version="3.5.7" />
   </ExtensionList>
 
   <ExecutionEnvironment>
@@ -33,6 +33,7 @@
             <Parameter>--allow-file-access</Parameter>
             <Parameter>--allow-file-access-from-files</Parameter>
             <Parameter>--disable-site-isolation-trials</Parameter>
+            <Parameter>--autoplay-policy=no-user-gesture-required</Parameter>
           </CEFCommandLine>
         </Resources>
         <Lifecycle>
