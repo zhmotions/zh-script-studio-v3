@@ -72,7 +72,7 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.5.7";
+  var EXT_VERSION = "3.5.8";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
@@ -2071,7 +2071,10 @@
       pvMap[k] = { preview: t.preview ? tplAssetUrl(t.preview) : "",
         hover: (t.previewVideo || t.preview) ? tplAssetUrl(t.previewVideo || t.preview) : "", isVideo: !!t.previewVideo };
     });
-    function withPv(it) { var p = pvMap[(it.name || "").toLowerCase()]; if (p && p.preview) { it.preview = p.preview; it.hover = p.hover; it.isVideo = p.isVideo; } return it; }
+    // Attach the online preview by name. Apply when there's EITHER an image preview OR a video (hover) —
+    // a video-only template has preview="" so the old `if (p.preview)` skipped it, and the active/saved
+    // card lost its animated thumbnail.
+    function withPv(it) { var p = pvMap[(it.name || "").toLowerCase()]; if (p && (p.preview || p.hover)) { it.preview = p.preview; it.hover = p.hover; it.isVideo = p.isVideo; } return it; }
 
     var items = [withPv({ path: "", name: "ZH Default Title", preview: "", builtin: true })];
     try { bundledTemplates().forEach(function (t) { items.push(withPv({ path: t.path, name: t.name, preview: "", builtin: true })); }); } catch (e) {}

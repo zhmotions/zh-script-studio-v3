@@ -1,4 +1,4 @@
-# ZH Script Studio v3.5.7
+# ZH Script Studio v3.5.8
 
 First non-beta release.
 
@@ -21,3 +21,6 @@ First non-beta release.
 
 ## v3.5.7
 - Online template video previews now actually play in the card (CEF muted-autoplay enabled).
+
+## v3.5.8
+- Active/applied online templates keep their animated video preview (was lost when a template became active).
