@@ -31,7 +31,9 @@
       mode: safeString(o.mode || "caption"),
       mogrtPath: safeString(o.mogrtPath || ""),
       animated: (o.animated === true || o.animated === "true"),  // panel's Animated toggle
-      animStyle: safeString(o.animStyle || "pop")                // built-in AE animation style
+      animStyle: safeString(o.animStyle || "pop"),               // built-in AE animation style
+      hlWords: (o.hlWords && o.hlWords.length) ? o.hlWords : [],  // Hormozi: marked words to pop
+      hlColor: safeString(o.hlColor || "#ffe14d")                // highlight colour (default yellow)
     };
   }
 
@@ -357,6 +359,58 @@
     } catch (e) { return false; }
   }
 
+  // Apply the bounce to the SELECTED properties of a layer. opts:
+  //   props  = ["scale","position","rotation"]  (default ["scale"])
+  //   e, g   = elasticity / gravity (manual). Auto picks sensible defaults.
+  //   dropPx = position drop-in distance.
+  // PURE-KEYFRAME bounce (no expression — works on every AE version + expression engine). Each chosen
+  // property snaps in then OVERSHOOTS past its target with decreasing bounces (eased), like a ball.
+  //   e (elasticity 0.1–0.95) → overshoot size · g (gravity) → snap speed.
+  function applyBounceSystem(layer, t, opts) {
+    opts = opts || {};
+    var props = (opts.props && opts.props.length) ? opts.props : ["scale"];
+    var e = (opts.e > 0) ? opts.e : 0.65;
+    var of = Math.max(0.10, Math.min(0.36, e * 0.38));            // overshoot fraction of the move
+    var g = (opts.g > 0) ? opts.g : 4000;
+    var d = Math.max(0.16, Math.min(0.42, 1500 / g));             // snap-in time (snappier g → shorter)
+    var dropPx = (opts.dropPx == null) ? 130 : opts.dropPx;
+    var tr = layer.property("Transform");
+    var i, k;
+    // Bounce a value: from → (overshoot past to) → settle. Works for scalars and arrays.
+    function bounceTo(p, fromV, toV) {
+      var isArr = (toV.length !== undefined);
+      function over(sign, frac) {                                 // toV + (toV-fromV)*sign*frac
+        if (!isArr) return toV + (toV - fromV) * sign * frac;
+        var v = []; for (var j = 0; j < toV.length; j += 1) v[j] = toV[j] + (toV[j] - fromV[j]) * sign * frac; return v;
+      }
+      try {
+        p.setValueAtTime(t, fromV);
+        p.setValueAtTime(t + d, over(1, of));                     // overshoot past target (biggest)
+        p.setValueAtTime(t + d + 0.10, over(-1, of * 0.42));      // bounce back under
+        p.setValueAtTime(t + d + 0.19, over(1, of * 0.16));       // small overshoot
+        p.setValueAtTime(t + d + 0.26, toV);                      // settle
+        try { easeKeys(p); } catch (e2) {}
+      } catch (e3) {}
+    }
+    for (i = 0; i < props.length; i += 1) {
+      var name = String(props[i]).toLowerCase();
+      if (name === "scale") {
+        var sc = tr.property("Scale"), sv = sc.value, sf = [];
+        for (k = 0; k < sv.length; k += 1) sf[k] = 0;
+        bounceTo(sc, sf, sv);                                     // 0 → original scale, bouncing
+      } else if (name === "position") {
+        var pos = tr.property("Position"), base = pos.value, pf = [];
+        for (k = 0; k < base.length; k += 1) pf[k] = base[k];
+        pf[1] -= Math.abs(dropPx);                                // drop in from above
+        bounceTo(pos, pf, base);
+      } else if (name === "rotation") {
+        var rot = tr.property("Rotation"), rv = rot.value;
+        bounceTo(rot, rv - 18, rv);                               // rotate in
+      }
+    }
+    try { var op = tr.property("Opacity"); op.setValueAtTime(t, 0); op.setValueAtTime(t + 0.10, 100); try { easeKeys(op); } catch (eE) {} } catch (eO) {}
+  }
+
   // Apply a built-in animation STYLE to a text layer between t (in) and outP (out).
   // Position moves are relative to wherever the layer already sits (so it works for centred
   // titles AND bottom subtitles). Returns nothing; always wrapped so a failure is harmless.
@@ -367,6 +421,7 @@
       var base = pos.value;
       var inT = 0.40, outT = 0.30;
       style = String(style || "fade").toLowerCase();
+      if (style === "none") return;   // deliberately static title — no animation
 
       if (style === "typewriter") {
         // Type-on: an Opacity=0 text animator over a Range Selector whose Start sweeps 0→100%.
@@ -391,8 +446,12 @@
       // Clone the position (keeps 2D vs 3D dimensions — a 2-element set on a 3D layer throws,
       // which silently killed the whole animation).
       function pAt(dx, dy) { var v = []; for (var k = 0; k < base.length; k += 1) v[k] = base[k]; v[0] += dx; v[1] += dy; return v; }
+      // Uniform scale that matches the layer's dimension count (2D=[x,y], 3D=[x,y,z]) — a 2-element
+      // set on a 3D layer throws and silently kills the whole animation (same trap as pAt above).
+      function sAt(p) { var sv = sc.value, o = []; for (var k = 0; k < sv.length; k += 1) o[k] = p; return o; }
       if (style === "slide-up") {
-        pos.setValueAtTime(t, pAt(0, 90)); pos.setValueAtTime(t + inT, pAt(0, 0));
+        // Whole-line slide-up + fade (pure Transform keyframes — reliable on every AE version).
+        pos.setValueAtTime(t, pAt(0, 100)); pos.setValueAtTime(t + inT, pAt(0, 0));
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
       } else if (style === "slide-down") {
         pos.setValueAtTime(t, pAt(0, -90)); pos.setValueAtTime(t + inT, pAt(0, 0));
@@ -401,18 +460,111 @@
         pos.setValueAtTime(t, pAt(140, 0)); pos.setValueAtTime(t + inT, pAt(0, 0));
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
       } else if (style === "pop") {
-        sc.setValueAtTime(t, [55, 55]); sc.setValueAtTime(t + inT, [110, 110]); sc.setValueAtTime(t + inT + 0.12, [100, 100]);
+        sc.setValueAtTime(t, sAt(55)); sc.setValueAtTime(t + inT, sAt(110)); sc.setValueAtTime(t + inT + 0.12, sAt(100));
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
       } else if (style === "scale") {
-        sc.setValueAtTime(t, [80, 80]); sc.setValueAtTime(t + inT, [100, 100]);
+        sc.setValueAtTime(t, sAt(80)); sc.setValueAtTime(t + inT, sAt(100));
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
-      } else { // fade
+      } else if (style === "bounce") {
+        // Realistic bounce via the decaying-sine expression system (overshoot → settle, physics-like).
+        applyBounceSystem(layer, t, { props: ["scale"] });
+        return;   // applyBounceSystem owns Scale/Opacity keyframes + expression
+      } else if (style === "karaoke") {
+        // Per-word highlight: each cue is one word (wpc=1). Paint it the accent gold + a quick scale
+        // pop so the spoken word "lights up" karaoke-style as it appears.
+        try { var ktd = layer.property("Source Text").value; ktd.applyFill = true; ktd.fillColor = [0.831, 0.627, 0.090]; layer.property("Source Text").setValue(ktd); } catch (eKar) {}
+        sc.setValueAtTime(t, sAt(60)); sc.setValueAtTime(t + inT, sAt(110)); sc.setValueAtTime(t + inT + 0.1, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
+      } else if (style === "glow") {
+        // Glow: add the Glow effect with a VISIBLE radius + scale-fade in.
+        // (Bug before: radius was set to 1.4 — effectively invisible. 0002=Threshold, 0003=Radius,
+        //  0004=Intensity.)
+        try {
+          var par = layer.property("ADBE Effect Parade");
+          if (par && (par.canAddProperty ? par.canAddProperty("ADBE Glo2") : true)) {
+            var glo = par.addProperty("ADBE Glo2");
+            try { glo.property("ADBE Glo2-0002").setValue(50); } catch (eGt) {}   // Threshold %
+            try { glo.property("ADBE Glo2-0003").setValue(34); } catch (eGr) {}   // Radius (visible)
+            try { glo.property("ADBE Glo2-0004").setValue(1.8); } catch (eGi) {}  // Intensity
+          }
+        } catch (eGlow) {}
+        sc.setValueAtTime(t, sAt(82)); sc.setValueAtTime(t + inT, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
+      } else if (style === "hormozi") {
+        // Hormozi caption: a punchy scale-pop in. The yellow keyword highlight is added separately
+        // (addAESubtitles → applyKeywordHighlight on the auto-detected power words).
+        sc.setValueAtTime(t, sAt(62)); sc.setValueAtTime(t + inT, sAt(108)); sc.setValueAtTime(t + inT + 0.1, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + 0.12, 100);
+      } else { // fade / clean — minimal, no scale punch
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
       }
       if (outP - t > inT + outT) { op.setValueAtTime(outP - outT, 100); op.setValueAtTime(outP, 0); }
       try { easeKeys(op); } catch (e1) {}
       try { if (sc.numKeys) easeKeys(sc); } catch (e2) {}
       try { if (pos.numKeys) easeKeys(pos); } catch (e3) {}
+    } catch (e) {}
+  }
+
+  // Auto power-words for the Hormozi CAPTION style (no manual marking on transcribed captions).
+  // Returns the words AS THEY APPEAR in the text (so applyKeywordHighlight's indexOf matches case).
+  function zhPowerWords(text) {
+    var t = String(text || "");
+    var en = { free:1, now:1, "new":1, best:1, secret:1, fast:1, easy:1, money:1, more:1, never:1, stop:1, huge:1, instantly:1, proven:1, guaranteed:1, results:1, mistake:1, wrong:1, first:1, only:1, today:1, win:1, viral:1, profit:1, clients:1, sales:1, growth:1, million:1, "double":1, biggest:1, important:1 };
+    var bn = ["ফ্রি", "নতুন", "সেরা", "এখন", "টাকা", "কখনো", "সবচেয়ে", "দ্রুত", "সহজ", "ভুল", "সঠিক", "আজ", "লাভ", "গ্রাহক", "সেলস", "মিলিয়ন", "ডাবল", "গুরুত্বপূর্ণ"];
+    var out = [], seen = {}, i;
+    var toks = t.split(/\s+/);
+    for (i = 0; i < toks.length; i += 1) {
+      var w = toks[i].replace(/^[^A-Za-z0-9ঀ-৿]+/, "").replace(/[^A-Za-z0-9ঀ-৿]+$/, "");
+      if (!w) continue;
+      var lw = w.toLowerCase();
+      if (en[lw] && !seen[lw]) { out.push(w); seen[lw] = 1; }
+    }
+    for (i = 0; i < bn.length; i += 1) { if (t.indexOf(bn[i]) >= 0 && !seen[bn[i]]) { out.push(bn[i]); seen[bn[i]] = 1; } }
+    return out;
+  }
+  // Hormozi keyword highlight: colour the given words inside a text layer yellow.
+  // PRIMARY = the modern per-character CharacterRange API (AE 24.3+/2026) — sets the keyword chars'
+  // fill directly, RELIABLE (no text-animator selector, which is the flaky path that broke slide).
+  // FALLBACK (old AE) = a character-index Range Selector animator.
+  function applyKeywordHighlight(layer, words, hex) {
+    if (!words || !words.length) return;
+    try {
+      var st = layer.property("Source Text");
+      var src = String(st.value.text || "");
+      var rgb = hexToRgb(hex || "#ffe14d");
+      var w, word, idx;
+      // --- Reliable path: CharacterRange ---
+      if (typeof st.characterRange === "function") {
+        var any = false;
+        for (w = 0; w < words.length; w += 1) {
+          word = String(words[w] || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+          if (!word) continue;
+          idx = src.indexOf(word); if (idx < 0) continue;
+          try {
+            var cr = st.characterRange(idx, idx + word.length);
+            try { cr.applyFill = true; } catch (eAf) {}
+            cr.fillColor = rgb;
+            any = true;
+          } catch (eCR) {}
+        }
+        if (any) return;
+      }
+      // --- Fallback path: text-animator range selector (older AE) ---
+      var animators = layer.property("ADBE Text Properties").property("ADBE Text Animators");
+      for (w = 0; w < words.length; w += 1) {
+        word = String(words[w] || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+        if (!word) continue;
+        idx = src.indexOf(word); if (idx < 0) continue;
+        try {
+          var ag = animators.addProperty("ADBE Text Animator");
+          var ap = ag.property("ADBE Text Animator Properties");
+          try { ap.addProperty("ADBE Text Fill Color").setValue(rgb); } catch (eFc) {}
+          var sel = ag.property("ADBE Text Selectors").addProperty("ADBE Text Selector");
+          try { sel.property("ADBE Text Range Units").setValue(2); } catch (eU) {}
+          sel.property("ADBE Text Percent Start").setValue(idx);
+          sel.property("ADBE Text Percent End").setValue(idx + word.length);
+        } catch (eW) {}
+      }
     } catch (e) {}
   }
 
@@ -448,22 +600,24 @@
         layer.property("Transform").property("Position").setValue([comp.width / 2, comp.height / 2]);
       } catch (eC) {}
 
-      // Animation is gated by the panel's "Animated" toggle — when Off, Title/Batch insert a
-      // clean static title (no preset, no fade/scale).
-      var presetApplied = false;
-      // CUSTOM PRESET: if the active template is an .ffx animation preset, apply it at this title's
-      // start time (deselect others first — see applyPresetAt).
-      if (opts.animated && opts.mogrtPath && /\.ffx$/i.test(opts.mogrtPath)) {
-        var pf = new File(opts.mogrtPath);
-        if (pf.exists) { presetApplied = applyPresetAt(comp, layer, pf, t); if (!presetApplied && !diagAE) diagAE = "preset failed to apply"; }
-        else if (!diagAE) diagAE = "preset file not found";
+      // Animation source — the chosen Effect chip WINS:
+      //   • a real effect (pop / typewriter / slide-up / glow / bounce) → apply that built-in style.
+      //   • "none" → no built-in effect. If a custom .ffx template is active, let ITS preset animate
+      //              the layer; otherwise a clean static title.
+      // (No dependence on a separate "Animated" toggle — picking an effect IS the intent.)
+      var aStyle = opts.animStyle || "pop";
+      if (aStyle === "none") {
+        if (opts.mogrtPath && /\.ffx$/i.test(opts.mogrtPath)) {
+          var pf = new File(opts.mogrtPath);
+          if (pf.exists) { if (!applyPresetAt(comp, layer, pf, t) && !diagAE) diagAE = "preset failed to apply"; }
+          else if (!diagAE) diagAE = "preset file not found";
+        }
+      } else {
+        applyAEAnim(layer, aStyle, t, outP);
       }
 
-      // BUILT-IN ANIMATION STYLE (only if Animated is On and no .ffx preset): the panel's chosen
-      // style — fade / pop / scale / slide-up / slide-down / slide-left / typewriter.
-      if (opts.animated && !presetApplied) {
-        applyAEAnim(layer, opts.animStyle || "pop", t, outP);
-      }
+      // Hormozi keyword highlight: words the user MARKED in the script pop in the accent colour.
+      try { if (opts.hlWords && opts.hlWords.length) applyKeywordHighlight(layer, opts.hlWords, opts.hlColor); } catch (eHl) {}
 
       t = outP + opts.gapSeconds; made += 1;
     }
@@ -519,14 +673,14 @@
     // After Effects subtitles: timed lower-third text layers from cues [{text,start,dur}].
     addAESubtitles: function (encCues, encOpts) {
       try {
-        var cues = eval("(" + decodeURIComponent(safeString(encCues)) + ")");
+        var cues = JSON.parse(decodeURIComponent(safeString(encCues)));
         if (!cues || !cues.length) return json(false, "No subtitle text.");
         if (!app.project || !(app.project.activeItem instanceof CompItem)) {
           return json(false, "Open an active composition first.");
         }
         // opts: { animated, style, ffx } — the SELECTED animation. ffx = a chosen .ffx preset path.
         var sOpts = {};
-        try { sOpts = encOpts ? eval("(" + decodeURIComponent(safeString(encOpts)) + ")") : {}; } catch (eO) { sOpts = {}; }
+        try { sOpts = encOpts ? JSON.parse(decodeURIComponent(safeString(encOpts))) : {}; } catch (eO) { sOpts = {}; }
         var sFfx = (sOpts.ffx && /\.ffx$/i.test(sOpts.ffx) && new File(sOpts.ffx).exists) ? new File(sOpts.ffx) : null;
         var comp = app.project.activeItem;
         app.beginUndoGroup("ZH Script Studio Subtitles");
@@ -544,6 +698,13 @@
             td.fontSize = 48; td.applyFill = true; td.fillColor = [1, 1, 1];
             try { td.justification = ParagraphJustification.CENTER_JUSTIFY; } catch (eJ) {}
             applyScriptFont(td, safeString(c.text));
+            // Hormozi look: UPPERCASE + white fill + thick black stroke (the defining captionbolt style).
+            if (sOpts.style === "hormozi") {
+              try { td.text = safeString(c.text).toUpperCase(); } catch (eUc) {}
+              td.fontSize = 64;
+              td.applyFill = true; td.fillColor = [1, 1, 1];
+              try { td.applyStroke = true; td.strokeColor = [0, 0, 0]; td.strokeWidth = Math.max(5, td.fontSize * 0.14); td.strokeOverFill = false; } catch (eStk) {}
+            }
             layer.property("Source Text").setValue(td);
           } catch (eS) {}
           var st = base + (parseFloat(c.start) || 0);
@@ -554,10 +715,14 @@
             layer.property("Transform").property("Anchor Point").setValue([r.left + r.width / 2, r.top + r.height / 2]);
             layer.property("Transform").property("Position").setValue([comp.width / 2, comp.height * 0.85]);
           } catch (eP) {}
-          // SELECTED animation: a chosen .ffx preset wins; else the chosen built-in style (if Animated On).
+          // SELECTED animation: a chosen .ffx preset wins; else the chosen built-in style.
           var animDone = false;
           if (sFfx) { animDone = applyPresetAt(comp, layer, sFfx, st); }
           if (!animDone && sOpts.animated) { applyAEAnim(layer, sOpts.style || "pop", st, outP); }
+          // Hormozi caption style → auto-highlight power words in this caption (yellow keyword pop).
+          if (!animDone && sOpts.style === "hormozi") {
+            try { applyKeywordHighlight(layer, zhPowerWords(safeString(c.text)), "#ffe14d"); } catch (eHz) {}
+          }
           made += 1;
         }
         app.endUndoGroup();
@@ -761,6 +926,36 @@
         return json(true, msg, { count: made, filled: filled, placed: true });
       } catch (e) {
         return json(false, "Animated subtitle error: " + e.toString());
+      }
+    },
+
+    // Bounce script: apply the bounce style to the SELECTED text layer(s) in the active comp
+    // (falls back to ALL text layers if none selected). Reusable on any text, independent of insert.
+    bounceSelectedLayers: function (optsJson) {
+      try {
+        if (!isAE()) return json(false, "Bounce script is After Effects only.");
+        if (!app.project || !(app.project.activeItem instanceof CompItem)) return json(false, "Open an active composition first.");
+        // opts from the panel: { props:["scale","position","rotation"], mode:"auto"|"manual", e, g }
+        var o = {}; try { o = optsJson ? JSON.parse(decodeURIComponent(safeString(optsJson))) : {}; } catch (eO) { o = {}; }
+        var props = (o.props && o.props.length) ? o.props : ["scale", "position"];
+        var bo = { props: props };
+        if (o.mode === "manual") { if (o.e > 0) bo.e = o.e; if (o.g > 0) bo.g = o.g; }   // else auto defaults
+        var comp = app.project.activeItem;
+        var targets = [], i, j;
+        var sel = comp.selectedLayers;
+        for (i = 0; i < sel.length; i += 1) { if (sel[i] instanceof TextLayer) targets.push(sel[i]); }
+        if (!targets.length) { for (j = 1; j <= comp.numLayers; j += 1) { if (comp.layer(j) instanceof TextLayer) targets.push(comp.layer(j)); } }
+        if (!targets.length) return json(false, "No text layer found — select a text layer first.");
+        app.beginUndoGroup("ZH Bounce");
+        var done = 0;
+        for (i = 0; i < targets.length; i += 1) {
+          applyBounceSystem(targets[i], targets[i].inPoint, bo);
+          done += 1;
+        }
+        app.endUndoGroup();
+        return json(true, "🪀 Bounced " + done + " text layer" + (done !== 1 ? "s" : "") + ".", { count: done });
+      } catch (e) {
+        return json(false, "Bounce failed: " + e.toString());
       }
     },
 

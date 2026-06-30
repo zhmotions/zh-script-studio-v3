@@ -60,28 +60,38 @@
     group.forEach(function (b) { b.classList.toggle("active", b === btn); });
   }
   document.addEventListener("DOMContentLoaded", function () {
-    // style chips → hidden #captionStyle. Karaoke = 1 word/caption (reuse wpc=1).
-    var styleBtns = Array.prototype.slice.call(document.querySelectorAll(".cstyle-btn"));
-    var styleHidden = document.getElementById("captionStyle");
-    styleBtns.forEach(function (b) {
-      b.addEventListener("click", function () {
-        activate(styleBtns, b);
-        var v = b.getAttribute("data-style");
-        if (styleHidden) styleHidden.value = v;
-        if (v === "karaoke") {
-          var w1 = document.querySelector('.wpc-btn[data-wpc="1"]');
-          if (w1) w1.click();
-        }
+    // Each .v3-stylegroup is INDEPENDENT: its chips only toggle within that group and write to
+    // that group's own hidden input. Title "Effect" → #effectStyle; subtitle "Style" → #captionStyle.
+    // (Before, one global querySelectorAll made the two groups fight over a single hidden input —
+    // picking a Title effect silently changed the subtitle style and vice-versa.)
+    var groups = Array.prototype.slice.call(document.querySelectorAll(".v3-stylegroup"));
+    groups.forEach(function (group) {
+      var btns = Array.prototype.slice.call(group.querySelectorAll(".cstyle-btn"));
+      var hidden = group.querySelector('input[type="hidden"]');
+      btns.forEach(function (b) {
+        b.addEventListener("click", function () {
+          activate(btns, b);
+          var v = b.getAttribute("data-style");
+          if (hidden) hidden.value = v;
+          if (v === "karaoke") {
+            var w1 = document.querySelector('.wpc-btn[data-wpc="1"]');
+            if (w1) w1.click();
+          }
+        });
       });
     });
   });
 
-  // app.js reads this for the host animation style. Karaoke is driven by wpc=1,
-  // so the underlying clip animation falls back to a real AE style (pop).
+  // Subtitle animation style. Karaoke is driven by wpc=1 (one word/caption) AND now carries a real
+  // per-word highlight animation in the host, so pass it through (don't remap to pop).
   window.zhCaptionStyle = function () {
     var el = document.getElementById("captionStyle");
-    var s = el && el.value ? el.value : "pop";
-    return s === "karaoke" ? "pop" : s;
+    return el && el.value ? el.value : "pop";
+  };
+  // Title/Batch animation effect — SEPARATE from the subtitle style.
+  window.zhEffectStyle = function () {
+    var el = document.getElementById("effectStyle");
+    return el && el.value ? el.value : "pop";
   };
   window.zhBijoyOn = function () {
     var el = document.getElementById("bijoyToggle");

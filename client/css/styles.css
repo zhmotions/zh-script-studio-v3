@@ -1159,7 +1159,7 @@ body{ background:linear-gradient(160deg,#141019,#1a1326)!important; color:var(--
 
 /* settings overlay (toolsMenu) */
 .tools-wrap{ position:relative; }
-.settings-menu{ position:fixed; right:12px; top:48px; z-index:9000; background:var(--v-bg2); border:1px solid var(--v-gold); border-radius:13px; padding:13px; width:300px; max-height:70vh; overflow:auto; box-shadow:0 14px 40px rgba(0,0,0,.5); }
+.settings-menu{ position:fixed; right:12px; top:48px; z-index:9000; background:var(--v-bg2); border:1px solid var(--v-gold); border-radius:13px; padding:13px; width:min(380px,92vw); max-height:70vh; overflow:auto; box-shadow:0 14px 40px rgba(0,0,0,.5); }
 .settings-menu .field{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; font-size:12px; }
 .settings-menu select,.settings-menu input[type=number]{ background:var(--v-card); border:1px solid var(--v-line); color:var(--v-txt); border-radius:7px; padding:5px 8px; }
 
@@ -1189,7 +1189,7 @@ body{ background:linear-gradient(160deg,#141019,#1a1326)!important; color:var(--
 .v3-bntoggle input{ accent-color:var(--v-gold); }
 
 /* v3 settings overlay → centered modal */
-.settings-menu{ position:fixed!important; top:50%!important; left:50%!important; right:auto!important; transform:translate(-50%,-50%); width:300px; max-width:90vw; max-height:80vh; }
+.settings-menu{ position:fixed!important; top:50%!important; bottom:auto!important; left:50%!important; right:auto!important; transform:translate(-50%,-50%); width:min(380px,92vw); max-width:90vw; max-height:80vh; }
 html,body{ overflow-x:hidden; }
 .app-shell{ width:100%; }
 .v3-actiongrid .button{ font-size:11.5px!important; padding:11px 6px!important; }
@@ -1197,3 +1197,96 @@ html,body{ overflow-x:hidden; }
 /* v3 tabs fit + polish */
 .v3-tab{ font-size:10.5px; padding:7px 2px; }
 .v3-tabs{ gap:3px; }
+
+/* ═══ v3 issue fixes (beta feedback) ═══ */
+
+/* #4 theme: drive bg via var so .theme-light can override */
+body{ background:var(--v-grad,linear-gradient(160deg,#141019,#1a1326))!important; }
+body.theme-light{
+  --v-bg:#f3f0f7; --v-bg2:#ffffff; --v-card:#ffffff; --v-line:#e4dded;
+  --v-txt:#211a2b; --v-sub:#6f6679; --v-grad:linear-gradient(160deg,#f7f4fb,#eee9f4);
+  color:#211a2b!important;
+}
+body.theme-light .host-badge,body.theme-light .v3-iconbtn{ background:#f3f0f7; }
+body.theme-light .status-message{ color:var(--v-gold2); }
+
+/* #5 logo: old image style + name beside */
+.v3-brand{ display:flex; align-items:center; gap:8px; }
+.v3-brand .brand-logo{ width:28px; height:28px; border-radius:7px; display:block; }
+.v3-name{ font-weight:800; font-size:14px; }
+.v3-name em{ font-style:normal; color:var(--v-gold); }
+
+/* #2 document box: scroll + user-resizable */
+.v3-stage{ flex:1; min-height:120px; }
+.document-viewport{ resize:vertical; overflow:auto; min-height:140px; max-height:70vh; }
+
+/* #1 settings overlay: clean centered card */
+.settings-menu{ display:block!important; position:fixed!important; top:50%!important; bottom:auto!important; left:50%!important; right:auto!important; transform:translate(-50%,-50%); width:min(380px,92vw); max-width:90vw; max-height:80vh; overflow:auto; background:var(--v-bg2); border:1px solid var(--v-gold); border-radius:14px; padding:16px; box-shadow:0 18px 50px rgba(0,0,0,.55); z-index:9999; }
+.settings-menu .toggle-row{ display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:12px; }
+.settings-menu .field>span{ color:var(--v-sub); font-size:11px; }
+.settings-menu .swatch-field{ flex-direction:column; align-items:flex-start; gap:6px; }
+.settings-menu .size-control{ display:flex; gap:5px; align-items:center; }
+.settings-menu .mini-button{ padding:4px 8px!important; }
+
+/* ═══ v3 fixes round 2 ═══ */
+/* EFFECT/Style chips = AE-only (Premiere uses MOGRT animation) */
+body:not(.host-ae) .v3-stylegroup{ display:none; }
+
+/* script box: actually resizable (was flex-stretched → resize ignored) */
+.v3-stage{ flex:0 0 auto!important; display:block!important; padding:10px 12px 0; }
+.document-viewport{ flex:none!important; height:260px; min-height:120px; max-height:75vh; resize:vertical!important; overflow:auto!important; }
+.app-shell{ height:100vh; overflow-y:auto; }
+
+/* ═══ Templates tab — new card design (v3.0.5) ═══ */
+.tplx-search{ position:relative; margin:4px 0 12px; }
+.tplx-search-ic{ position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:.6; font-size:13px; pointer-events:none; }
+.tplx-search input{ width:100%; box-sizing:border-box; background:var(--v-card,#1c1c1c); border:1px solid var(--v-line,#3a3340); color:var(--v-txt,#eee); border-radius:11px; padding:11px 12px 11px 34px; font-size:13px; }
+.tplx-search input:focus{ outline:none; border-color:var(--v-gold,#d4a017); }
+.tplx-filters{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:12px; }
+.tplx-chip{ font-size:11.5px; font-weight:700; padding:6px 13px; border-radius:16px; border:1px solid var(--v-line,#3a3340); background:var(--v-bg2,#241c2e); color:var(--v-sub,#9a8fa6); cursor:pointer; }
+.tplx-chip.active{ background:linear-gradient(135deg,var(--v-gold,#d4a017),var(--v-gold2,#e8c14d)); color:#1a1206; border-color:transparent; }
+.tplx-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+.tplx-card{ position:relative; background:var(--v-bg2,#241c2e); border:1px solid var(--v-line,#3a3340); border-radius:13px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+.tplx-card.active{ border-color:var(--v-gold,#d4a017); box-shadow:0 0 0 1px var(--v-gold,#d4a017) inset; }
+.tplx-thumb{ width:100%; aspect-ratio:16/10; border-radius:8px; background:#0c0a10 center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:22px; overflow:hidden; }
+.tplx-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.tplx-name{ font-size:12.5px; font-weight:700; color:var(--v-txt,#eee); line-height:1.25; }
+.tplx-add{ width:100%; box-sizing:border-box; border:0; border-radius:9px; padding:9px; font-size:12px; font-weight:800; cursor:pointer; background:linear-gradient(135deg,var(--v-gold,#d4a017),var(--v-gold2,#e8c14d)); color:#1a1206; }
+.tplx-add.ghost{ background:none; border:1px solid var(--v-gold,#d4a017); color:var(--v-gold,#d4a017); }
+.tplx-add-card .tplx-thumb{ background:transparent; border:1.5px dashed var(--v-line,#3a3340); color:var(--v-sub,#9a8fa6); }
+.tplx-rm{ position:absolute; top:6px; right:8px; font-size:11px; color:var(--v-sub,#9a8fa6); cursor:pointer; background:rgba(0,0,0,.45); border-radius:50%; width:18px; height:18px; line-height:18px; text-align:center; }
+.tplx-rm:hover{ color:#ff6b6b; }
+.tplx-empty{ grid-column:1/-1; opacity:.6; font-size:12px; padding:14px 0; text-align:center; }
+
+/* Settings menu: keep the hidden-attribute toggle working despite display:block!important above
+   (.settings-menu[hidden] has higher specificity, so the menu still closes). */
+.settings-menu[hidden]{ display:none !important; }
+
+.tplx-tag{ font-size:9px; font-weight:700; color:var(--v-gold,#d4a017); border:1px solid var(--v-gold,#d4a017); border-radius:6px; padding:1px 5px; vertical-align:middle; opacity:.8; }
+
+/* ═══ Caption Style cards (v3.2) ═══ */
+.ccard-group{ margin:6px 0 10px; }
+.ccard-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.ccard-head span:first-child{ font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--v-sub,#9a8fa6); text-transform:uppercase; }
+.ccard-fire{ font-size:10.5px; font-weight:800; color:var(--v-gold,#d4a017); }
+.ccard-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.ccard{ display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center; padding:14px 8px 11px; border-radius:13px; border:1px solid var(--v-line,#3a3340); background:var(--v-bg2,#241c2e); cursor:pointer; transition:border-color .12s,background .12s; }
+.ccard:hover{ border-color:var(--v-gold,#d4a017); }
+.ccard.active{ border-color:var(--v-gold,#d4a017); background:linear-gradient(160deg,#d4a01720,#241c2e); box-shadow:0 0 0 1px var(--v-gold,#d4a017) inset; }
+.ccard-demo{ font-size:17px; font-weight:800; color:var(--v-txt,#fff); line-height:1.1; margin-bottom:5px; }
+.ccard-demo .hl{ color:var(--v-gold,#e8c14d); font-style:normal; }
+.ccard-demo.ccard-clean{ font-size:14px; font-weight:600; opacity:.85; }
+.ccard-t{ font-size:12.5px; font-weight:700; color:var(--v-txt,#fff); }
+.ccard-s{ font-size:10px; color:var(--v-sub,#9a8fa6); }
+
+/* Bounce control row */
+.bnc-ctl{ display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:2px 0 8px; font-size:11px; color:var(--v-sub,#9a8fa6); }
+.bnc-lead{ font-weight:700; }
+.bnc-chk{ display:flex; align-items:center; gap:4px; cursor:pointer; }
+.bnc-chk input{ accent-color:var(--v-gold,#d4a017); }
+.bnc-sel{ background:var(--v-card,#1c1c1c); border:1px solid var(--v-line,#3a3340); color:var(--v-txt,#eee); border-radius:7px; padding:3px 6px; font-size:11px; }
+.bnc-num{ width:58px; background:var(--v-card,#1c1c1c); border:1px solid var(--v-line,#3a3340); color:var(--v-txt,#eee); border-radius:7px; padding:3px 6px; font-size:11px; }
+.bnc-manual{ display:inline-flex; gap:6px; }
+
+/* AE-only controls (e.g. Bounce script) — hidden in Premiere where they do nothing */
+body:not(.host-ae) .ae-only{ display:none !important; }

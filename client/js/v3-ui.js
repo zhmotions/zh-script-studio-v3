@@ -3,13 +3,11 @@
 (function () {
   document.addEventListener("click", function (e) {
     var t = e.target.closest(".v3-tab");
-    if (!t) return;
-    var dock = t.getAttribute("data-dock");
-    document.querySelectorAll(".v3-tab").forEach(function (x) {
-      x.classList.toggle("active", x === t);
-    });
-    document.querySelectorAll(".v3-pane").forEach(function (p) {
-      p.classList.toggle("active", p.getAttribute("data-dockpane") === dock);
-    });
+    if (t) {
+      var dock = t.getAttribute("data-dock");
+      document.querySelectorAll(".v3-tab").forEach(function (x) { x.classList.toggle("active", x === t); });
+      document.querySelectorAll(".v3-pane").forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-dockpane") === dock); });
+      return;
+    }
   });
 })();

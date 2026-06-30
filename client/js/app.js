@@ -48,6 +48,8 @@
     try { enforceLicense(); } catch (e) { /* fail open if gate errors */ }
     applyPreferencesToControls();
     applyVisualPreferences();
+    try { stampVersion(); } catch (e) {}
+    try { wireTemplateTab(); } catch (e) {}
     renderTitleTemplate();
     renderRecentFiles();
     updateSearchControls();
@@ -69,13 +71,13 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.0.0";
+  var EXT_VERSION = "3.2.10";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
   // from a clean IP — so a flagged client network never blocks activation / Auto Subtitle.
   var DIRECT_BASE = "https://zhmotions.com";
-  var RELAY_BASE  = "https://api-relay.zhmotionspanel.workers.dev";
+  var RELAY_BASE  = "https://api-relay-2.zhmotionspanel.workers.dev";
   function apiRoot() {
     try { return localStorage.getItem("zh_use_relay") === "1" ? RELAY_BASE : DIRECT_BASE; } catch (e) { return DIRECT_BASE; }
   }
@@ -223,7 +225,6 @@
     els.zoomOutput = document.getElementById("zoomOutput");
     els.themeSelect = document.getElementById("themeSelect");
     els.searchInput = document.getElementById("searchInput");
-    els.copySelectionButton = document.getElementById("copySelectionButton");
     els.captionButton = document.getElementById("captionButton");
     els.batchButton = document.getElementById("batchButton");
     els.markerButton = document.getElementById("markerButton");
@@ -257,6 +258,10 @@
       try {
         var appId = (env && env.appName) || (state.csInterface.getApplicationID && state.csInterface.getApplicationID()) || "";
         state.hostIsAE = /AEFT/i.test(String(appId));
+        // v3: the animation Style/Effect chips only do anything in After Effects (text
+        // animators). In Premiere the title/subtitle animation comes from the MOGRT
+        // template, so hide the Effect chips there (use the Templates dock instead).
+        try { document.body.classList.toggle("host-ae", !!state.hostIsAE); } catch (eHb) {}
       } catch (eId) {}
 
       state.csInterface.addEventListener(
@@ -364,7 +369,6 @@
     els.searchInput.addEventListener("input", function () {
       runSearch(els.searchInput.value);
     });
-    els.copySelectionButton.addEventListener("click", copySelectedText);
     els.captionButton.addEventListener("click", function () { sendToTimeline("caption"); });
     els.batchButton.addEventListener("click", function () { sendToTimeline("batch"); });
     els.markerButton.addEventListener("click", function () { sendToTimeline("marker"); });
@@ -453,26 +457,34 @@
     if (autoSubBtn) autoSubBtn.addEventListener("click", function () { autoSubMain("subtitle"); });
     var transcribeBtn = document.getElementById("transcribeButton");
     if (transcribeBtn) transcribeBtn.addEventListener("click", function () { autoSubMain("transcribe"); });
-    // After Effects built-in animation styles for Title/Batch (cycle button, AE only).
-    var AE_STYLES = [
-      { id: "pop", label: "Pop" }, { id: "fade", label: "Fade" }, { id: "scale", label: "Scale" },
-      { id: "slide-up", label: "Slide Up" }, { id: "slide-down", label: "Slide Down" },
-      { id: "slide-left", label: "Slide Left" }, { id: "typewriter", label: "Typewriter" }
-    ];
-    var aeStyleBtn = document.getElementById("aeStyleBtn");
-    function aeStyleLabel(id) { for (var i = 0; i < AE_STYLES.length; i++) if (AE_STYLES[i].id === id) return AE_STYLES[i].label; return "Pop"; }
-    function refreshStyleBtn() {
-      if (!aeStyleBtn) return;
-      var cur = (state.prefs && state.prefs.aeAnimStyle) || "pop";
-      aeStyleBtn.textContent = "🎞 Style: " + aeStyleLabel(cur);
-      aeStyleBtn.hidden = !(state.hostIsAE && state.animatedSubs);   // only matters in AE + Animated On
+    // Bounce script: apply a bounce to the SELECTED After Effects text layer(s) — reusable on any
+    // text, independent of the Title/Batch insert flow.
+    var bncMode = document.getElementById("bncMode"), bncManual = document.getElementById("bncManual");
+    if (bncMode && bncManual) bncMode.addEventListener("change", function () { bncManual.hidden = bncMode.value !== "manual"; });
+    function bounceOpts() {
+      var props = [];
+      if (document.getElementById("bncScale") && document.getElementById("bncScale").checked) props.push("scale");
+      if (document.getElementById("bncPos") && document.getElementById("bncPos").checked) props.push("position");
+      if (document.getElementById("bncRot") && document.getElementById("bncRot").checked) props.push("rotation");
+      if (!props.length) props = ["scale"];
+      var mode = (bncMode && bncMode.value) || "auto";
+      var o = { props: props, mode: mode };
+      if (mode === "manual") {
+        o.e = parseFloat((document.getElementById("bncElastic") || {}).value) || 0.65;
+        o.g = parseFloat((document.getElementById("bncGravity") || {}).value) || 4000;
+      }
+      return o;
     }
-    if (aeStyleBtn) aeStyleBtn.addEventListener("click", function () {
-      var cur = (state.prefs && state.prefs.aeAnimStyle) || "pop";
-      var idx = 0; for (var i = 0; i < AE_STYLES.length; i++) if (AE_STYLES[i].id === cur) { idx = i; break; }
-      state.prefs.aeAnimStyle = AE_STYLES[(idx + 1) % AE_STYLES.length].id;
-      try { savePreferences(); } catch (e) {}
-      refreshStyleBtn();
+    var bounceBtn = document.getElementById("bounceScriptBtn");
+    if (bounceBtn) bounceBtn.addEventListener("click", function () {
+      if (!state.csInterface) { showStatus("Open After Effects and select text layer(s) first.", true); return; }
+      if (!state.hostIsAE) { showStatus("Bounce script is After Effects only.", true); return; }
+      showStatus("Applying bounce…", false, false);
+      var enc = encodeURIComponent(JSON.stringify(bounceOpts()));
+      state.csInterface.evalScript("$.zhScriptStudio.bounceSelectedLayers(" + JSON.stringify(enc) + ")", function (result) {
+        var response = parseHostResponse(result);
+        showStatus(response.message, !response.ok, false);
+      });
     });
 
     var animBtn = document.getElementById("animatedToggle");
@@ -481,7 +493,6 @@
       animBtn.classList.toggle("active", state.animatedSubs);
       animBtn.setAttribute("aria-pressed", state.animatedSubs ? "true" : "false");
       animBtn.textContent = state.animatedSubs ? "✨ Animated: On" : "✨ Animated: Off";
-      try { refreshStyleBtn(); } catch (e) {}
     });
     var audioInput = document.getElementById("audioInput");
     if (audioInput) audioInput.addEventListener("change", function (e) {
@@ -1277,6 +1288,9 @@
   function renderPlainText(text, name, filePath, isSrt) {
     var clean = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     if (window.zhBijoyOn && window.zhBijoyOn() && window.ZHBijoy) { clean = window.ZHBijoy.toUnicode(clean); }
+    // Keep the RAW srt (timecodes intact) so "From script" places captions on the REAL voice timing
+    // instead of a reading-speed estimate. Cleared for non-srt files.
+    state.srtRaw = isSrt ? clean : "";
     if (isSrt) {
       clean = clean
         .replace(/^\s*\d+\s*$/gm, "")                                   // cue numbers
@@ -1864,6 +1878,7 @@
     x.timeout = 10000;
     x.onload = function () {
       var j; try { j = JSON.parse(x.responseText); } catch (e) { fetchTemplateManifest(bases, idx + 1); return; }
+      TPL_BASE = bases[idx];   // serve preview assets from the same base that worked for the manifest
       var list = (j && j.templates) || [];
       var wantHost = state.hostIsAE ? "ae" : "ppro", wantExt = state.hostIsAE ? "ffx" : "mogrt";
       list = list.filter(function (t) { return (!t.host || t.host === wantHost) && (!t.file || new RegExp("\\." + wantExt + "$", "i").test(t.file)); });
@@ -1877,7 +1892,11 @@
   // Cache-bust template assets so a re-uploaded preview always refreshes (CEF would
   // otherwise keep serving the old cached image/video at the same URL). Per panel session.
   var TPL_CB = Date.now();
-  function tplAssetUrl(name) { return DIRECT_BASE + "/templates/" + name + "?v=" + TPL_CB; }
+  // Base for template ASSETS (preview images/videos). Set to whichever base served the manifest —
+  // if zhmotions.com direct is challenged by lsrecaptcha, the relay (clean Cloudflare IP) serves the
+  // images too. Hardcoding DIRECT_BASE meant previews silently 404'd / got the bot-challenge page.
+  var TPL_BASE = DIRECT_BASE;
+  function tplAssetUrl(name) { return TPL_BASE + "/templates/" + name + "?v=" + TPL_CB; }
   function showOnlineTemplateModal(list) {
     var old = document.getElementById("ssTplModal"); if (old) old.remove();
     var ov = document.createElement("div");
@@ -1934,8 +1953,16 @@
     var el = isVideo ? vid : img, other = isVideo ? img : vid;
     other.style.display = "none";
     if (el.getAttribute("data-src") !== url) {
-      el.src = url; el.setAttribute("data-src", url);
-      if (isVideo) { try { el.play(); } catch (e) {} }
+      el.setAttribute("data-src", url);
+      el.src = url;
+      if (isVideo) {
+        // play() right after setting src fails (not loaded yet) → load + play on canplay, and retry.
+        try { el.load(); } catch (e) {}
+        el.oncanplay = function () { try { el.play(); } catch (e) {} };
+        try { var p = el.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+      }
+    } else if (isVideo) {
+      try { if (el.paused) el.play(); } catch (e) {}
     }
     el.style.left = Math.max(8, Math.min(x + 16, window.innerWidth - 252)) + "px";
     el.style.top = Math.max(8, Math.min(y + 16, window.innerHeight - 170)) + "px";
@@ -2022,6 +2049,127 @@
         chip.addEventListener("mouseleave", function () { ssHidePreview(); });
       }
     });
+    try { renderTemplateGrid(); } catch (e) {}   // keep the Templates-tab card grid in sync
+  }
+
+  // ── Templates tab: card grid (new design) ──
+  var tplxFilter = "all", tplxQuery = "";
+  var tplxOnline = [];          // cached online catalog (each has a preview thumbnail)
+  var tplxOnlineLoaded = false;
+  function templateItems() {
+    // Preview lookup from the FULL manifest, matched by NAME (host-independent) — so local/bundled
+    // templates show their thumbnail + video even when the host filter would drop the online entry
+    // (e.g. the .mogrt previews are host:"ppro" but you're in AE).
+    var pvMap = {};
+    tplxOnline.forEach(function (t) {
+      var k = (t.name || t.file || "").toLowerCase(); if (!k) return;
+      pvMap[k] = { preview: t.preview ? tplAssetUrl(t.preview) : "",
+        hover: (t.previewVideo || t.preview) ? tplAssetUrl(t.previewVideo || t.preview) : "", isVideo: !!t.previewVideo };
+    });
+    function withPv(it) { var p = pvMap[(it.name || "").toLowerCase()]; if (p && p.preview) { it.preview = p.preview; it.hover = p.hover; it.isVideo = p.isVideo; } return it; }
+
+    var items = [withPv({ path: "", name: "ZH Default Title", preview: "", builtin: true })];
+    try { bundledTemplates().forEach(function (t) { items.push(withPv({ path: t.path, name: t.name, preview: "", builtin: true })); }); } catch (e) {}
+    (state.prefs.savedTemplates || []).forEach(function (t) { items.push(withPv({ path: t.path, name: t.name, preview: t.preview || "", saved: true })); });
+
+    // Online-only catalog entries (host-appropriate + not already local) → downloadable cards.
+    var have = {}; items.forEach(function (it) { have[(it.name || "").toLowerCase()] = 1; });
+    var wantHost = state.hostIsAE ? "ae" : "ppro", wantExt = state.hostIsAE ? "ffx" : "mogrt";
+    tplxOnline.forEach(function (t) {
+      var nm = t.name || t.file || ""; if (!nm || have[nm.toLowerCase()]) return;
+      if (t.host && t.host !== wantHost) return;
+      if (t.file && !new RegExp("\\." + wantExt + "$", "i").test(t.file)) return;
+      items.push({ online: true, file: t.file, name: nm, preview: t.preview ? tplAssetUrl(t.preview) : "",
+        hover: (t.previewVideo || t.preview) ? tplAssetUrl(t.previewVideo || t.preview) : "", isVideo: !!t.previewVideo, _t: t });
+    });
+    return items;
+  }
+  function renderTemplateGrid() {
+    var grid = document.getElementById("tplxGrid"); if (!grid) return;
+    var active = state.prefs.activeTemplatePath || "";
+    var items = templateItems().filter(function (it) {
+      if (tplxFilter === "saved" && !it.saved) return false;
+      if (tplxFilter === "lower" && !/lower/i.test(it.name)) return false;
+      if (tplxQuery && it.name.toLowerCase().indexOf(tplxQuery) < 0) return false;
+      return true;   // "all" + "titles" → every template (they're all title templates)
+    });
+    var html = items.map(function (it, i) {
+      var thumb = it.preview
+        ? '<img src="' + escapeHtml(it.preview) + '" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'🎬\'">'
+        : '🎬';
+      var addBtn = it.online
+        ? '<button type="button" class="tplx-add" data-dl="' + i + '">Add ↓</button>'
+        : '<button type="button" class="tplx-add" data-add="' + escapeHtml(it.path) + '">' + (active === it.path ? "✓ Active" : "Add ↓") + '</button>';
+      var hov = it.hover || it.preview || "";
+      return '<div class="tplx-card' + (active === it.path && !it.online ? " active" : "") + '"' +
+        (hov ? ' data-preview="' + escapeHtml(hov) + '"' + (it.isVideo ? ' data-video="1"' : '') : '') + '>' +
+        '<div class="tplx-thumb">' + thumb + '</div>' +
+        '<div class="tplx-name">' + escapeHtml(it.name) + (it.online ? ' <span class="tplx-tag">online</span>' : '') + '</div>' +
+        addBtn +
+        (it.saved ? '<span class="tplx-rm" data-rm="' + escapeHtml(it.path) + '">✕</span>' : '') +
+        '</div>';
+    }).join("");
+    if (!html) html = '<div class="tplx-empty">No templates here yet.</div>';
+    html += '<div class="tplx-card tplx-add-card"><div class="tplx-thumb">＋</div>' +
+      '<div class="tplx-name">Add your own</div>' +
+      '<button type="button" class="tplx-add" id="tplxBrowse">🌐 Refresh</button>' +
+      '<button type="button" class="tplx-add ghost" id="tplxFromFile">＋ File</button></div>';
+    grid.innerHTML = html;
+    // Keep a parallel array so data-dl can map back to the online template object.
+    var rendered = items;
+    Array.prototype.forEach.call(grid.querySelectorAll(".tplx-card"), function (card) {
+      var pv = card.getAttribute("data-preview");
+      if (pv) {
+        var isVid = card.getAttribute("data-video") === "1";
+        card.addEventListener("mousemove", function (e) { ssHoverPreview(pv, e.clientX, e.clientY, isVid); });
+        card.addEventListener("mouseleave", function () { ssHidePreview(); });
+      }
+    });
+    grid.querySelectorAll("[data-add]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); ssHidePreview(); activateTemplate(b.getAttribute("data-add")); showStatus("Template set — use +Title / Batch to insert.", false, true); });
+    });
+    grid.querySelectorAll("[data-dl]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); ssHidePreview(); var it = rendered[+b.getAttribute("data-dl")]; if (it && it._t) downloadOnlineTemplate(it._t); });
+    });
+    grid.querySelectorAll(".tplx-rm").forEach(function (x) {
+      x.addEventListener("click", function (e) { e.stopPropagation(); removeTemplate(x.getAttribute("data-rm")); });
+    });
+    var br = document.getElementById("tplxBrowse"); if (br) br.addEventListener("click", function () { loadOnlineTemplates(true); });
+    var ff = document.getElementById("tplxFromFile"); if (ff) ff.addEventListener("click", function () { chooseTitleTemplate(); });
+  }
+  // Pull the online manifest straight into the grid (so cards show real preview thumbnails),
+  // instead of only opening the separate modal. Tries direct → relay (relay bypasses lsrecaptcha).
+  function loadOnlineTemplates(force) {
+    if (tplxOnlineLoaded && !force) { renderTemplateGrid(); return; }
+    var bases = [DIRECT_BASE, RELAY_BASE];
+    (function tryBase(idx) {
+      if (idx >= bases.length) { tplxOnlineLoaded = true; renderTemplateGrid(); return; }
+      var x = new XMLHttpRequest();
+      try { x.open("GET", bases[idx] + "/templates/manifest.json?_=" + Date.now(), true); } catch (e) { tryBase(idx + 1); return; }
+      x.timeout = 10000;
+      x.onload = function () {
+        var j; try { j = JSON.parse(x.responseText); } catch (e) { tryBase(idx + 1); return; }
+        TPL_BASE = bases[idx];   // serve preview assets from the base that worked
+        tplxOnline = (j && j.templates) || [];   // keep the FULL manifest; host filter applied in templateItems
+        tplxOnlineLoaded = true;
+        renderTemplateGrid();
+      };
+      x.onerror = x.ontimeout = function () { tryBase(idx + 1); };
+      try { x.send(); } catch (e) { tryBase(idx + 1); }
+    })(0);
+  }
+  function wireTemplateTab() {
+    var s = document.getElementById("tplxSearch");
+    if (s) s.addEventListener("input", function () { tplxQuery = (s.value || "").toLowerCase().trim(); renderTemplateGrid(); });
+    var f = document.getElementById("tplxFilters");
+    if (f) f.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest(".tplx-chip") : null;
+      if (!b) return;
+      tplxFilter = b.getAttribute("data-filter") || "all";
+      f.querySelectorAll(".tplx-chip").forEach(function (c) { c.classList.toggle("active", c === b); });
+      renderTemplateGrid();
+    });
+    try { loadOnlineTemplates(false); } catch (e) {}   // populate grid with online previews on load
   }
 
   // Build a double-quoted ExtendScript string literal with \uXXXX for non-ASCII.
@@ -2060,7 +2208,12 @@
     // Active saved template wins; otherwise the bundled ZH-Title.mogrt.
     // normalize heals any already-stored file:// URL from older builds.
     var mogrtPath = normalizeLocalFilePath(state.prefs.activeTemplatePath || "") || bundledTemplatePath();
-    var options = encodeURIComponent(JSON.stringify({ durationSeconds: dur, gapSeconds: 0, mode: mode, fontSize: 64, color: "#FFFFFF", mogrtPath: mogrtPath, animated: !!state.animatedSubs, animStyle: (window.zhCaptionStyle ? window.zhCaptionStyle() : ((state.prefs && state.prefs.aeAnimStyle) || "pop")) }));
+    var effStyle = (window.zhEffectStyle ? window.zhEffectStyle() : "pop");
+    // The Effect chip IS the animation choice — apply it directly. Don't gate title effects behind
+    // the (subtitle-oriented) "Animated" toggle: that made picking Type-on/Slide/Glow do nothing.
+    // The "None" chip = a deliberately static title.
+    var effAnimated = !!effStyle && effStyle !== "none";
+    var options = encodeURIComponent(JSON.stringify({ durationSeconds: dur, gapSeconds: 0, mode: mode, fontSize: 64, color: "#FFFFFF", mogrtPath: mogrtPath, animated: effAnimated, animStyle: effStyle, hlWords: getMarkedWords(), hlColor: "#ffe14d" }));
     // \u-escaped literal — ExtendScript parses Unicode natively (decodeURIComponent mangles Bengali in Premiere → ??????).
     var encText = esEscape(text);
     var fn = mode === "batch" ? "pasteBatchToTimeline"
@@ -2079,6 +2232,36 @@
   function getSelectedText() {
     var selection = window.getSelection ? window.getSelection() : null;
     return selection ? selection.toString() : "";
+  }
+
+  // Stamp the real build version into the UI (header badge + Help modal) so the installed version is
+  // always visible — no more guessing whether a new .zxp actually loaded vs a cached old panel.
+  function stampVersion() {
+    var v = "v" + EXT_VERSION;
+    var ver = document.querySelector(".ver"); if (ver) ver.textContent = v;
+    var nm = document.querySelector(".v3-name");
+    if (nm && nm.parentNode && !document.getElementById("zhVerBadge")) {
+      var b = document.createElement("span"); b.id = "zhVerBadge"; b.textContent = v;
+      b.style.cssText = "font-size:9px;font-weight:700;color:var(--v-gold,#d4a017);border:1px solid var(--v-gold,#d4a017);border-radius:6px;padding:1px 5px;margin-left:6px;vertical-align:middle;opacity:.85;";
+      nm.parentNode.insertBefore(b, nm.nextSibling);
+    }
+  }
+
+  // Hormozi highlight: the words the user MARKED (.zh-mark spans) within the current selection
+  // (or, if nothing selected, anywhere in the document). Passed to the host so those words pop.
+  function getMarkedWords() {
+    var out = [];
+    try {
+      var sel = window.getSelection ? window.getSelection() : null;
+      var range = (sel && sel.rangeCount && !sel.isCollapsed) ? sel.getRangeAt(0) : null;
+      var marks = els.documentSurface ? els.documentSurface.querySelectorAll(".zh-mark") : [];
+      for (var i = 0; i < marks.length; i += 1) {
+        if (range && range.intersectsNode && !range.intersectsNode(marks[i])) continue;
+        var w = (marks[i].textContent || "").replace(/\s+/g, " ").trim();
+        if (w) out.push(w);
+      }
+    } catch (e) {}
+    return out;
   }
 
   // Make the script editable in-panel (fix typos like a Word file; Enter = new line).
@@ -2435,7 +2618,7 @@
       var arrow = /-->/.test(lines[0]) ? lines.shift() : "";
       if (!arrow) continue;
       var parts = arrow.split("-->");
-      var text = lines.join(" ").trim();
+      var text = lines.join("\n").trim();   // keep line breaks (dual-language stack + multi-line cues)
       if (!text) continue;
       cues.push({ start: tc(parts[0]), end: tc(parts[1] || ""), text: text });
     }
@@ -2512,17 +2695,53 @@
   // chosen built-in style, and whether Animated is On. So AE subtitles use what the user picked.
   function aeSubOptsEnc() {
     var ap = normalizeLocalFilePath((state.prefs && state.prefs.activeTemplatePath) || "");
+    var style = (window.zhCaptionStyle ? window.zhCaptionStyle() : ((state.prefs && state.prefs.aeAnimStyle) || "pop"));
     return encodeURIComponent(JSON.stringify({
-      animated: !!state.animatedSubs,
-      style: (window.zhCaptionStyle ? window.zhCaptionStyle() : ((state.prefs && state.prefs.aeAnimStyle) || "pop")),
+      // The caption-style CARD is the control now — every style except "Clean"/"None" animates,
+      // regardless of the (titles) Animated toggle. Clean = minimal subtle fade.
+      animated: style !== "clean" && style !== "none",
+      style: style,
       ffx: /\.ffx$/i.test(ap) ? ap : ""
     }));
   }
 
   // Got the .srt (sync or after polling) → save + auto-add to a caption track.
+  // Translate each caption line and stack "original\ntranslation" → a dual-language SRT.
+  function buildDualSrt(srt, target, cb) {
+    var cues = srtToCues(srt);
+    if (!cues.length) { cb(srt); return; }
+    var src = cues.map(function (c) { return String(c.text || "").replace(/\s*\n\s*/g, " ").trim(); }).join("\n");
+    var lic = getStoredLicense() || {};
+    var x = new XMLHttpRequest();
+    try { x.open("POST", apiRoot() + "/api.php?action=ss_translate_text", true); } catch (e) { cb(srt); return; }
+    x.timeout = 120000;
+    x.onload = function () {
+      var trans = null;
+      try { var jr = JSON.parse(x.responseText); if (jr && jr.text) trans = String(jr.text).split("\n"); } catch (e) {}
+      var ok = trans && trans.length === cues.length;
+      var out = "", i;
+      for (i = 0; i < cues.length; i += 1) {
+        var o = String(cues[i].text || "").replace(/\s*\n\s*/g, " ").trim();
+        var t = ok ? String(trans[i] || "").trim() : "";
+        var txt = t ? (o + "\n" + t) : o;
+        out += (i + 1) + "\r\n" + srtTimecode(cues[i].start) + " --> " + srtTimecode(cues[i].end) + "\r\n" + txt + "\r\n\r\n";
+      }
+      cb(out);
+    };
+    x.onerror = x.ontimeout = function () { cb(srt); };   // translation failed → original only
+    var fd = new FormData();
+    fd.append("key", lic.key || ""); fd.append("text", src); fd.append("tl", target);
+    try { x.send(fd); } catch (e) { cb(srt); }
+  }
+
   function finishSubtitle(j, audioName) {
     if (state.sttMode === "transcribe") { finishTranscript(j); return; }
     if (!j.srt) { showStatus(j.message || "No speech detected in the audio.", true, true); return; }
+    // Dual language: rebuild the SRT as "original\ntranslation" per cue, then continue.
+    if (window.zhDualLangOn && window.zhDualLangOn() && !j._dual) {
+      var dTgt = (document.getElementById("subTranslate") || {}).value || "en";
+      if (dTgt) { showStatus("Adding translation…", false, false); buildDualSrt(j.srt, dTgt, function (dsrt) { j.srt = dsrt; j._dual = true; finishSubtitle(j, audioName); }); return; }
+    }
 
     // After Effects: place timed text-layer subtitles in the composition (no caption track).
     if (state.hostIsAE) {
@@ -2591,7 +2810,9 @@
     var wpcEl = document.getElementById("wordsPerCue");
     var wpc = (wpcEl && wpcEl.value) || "0";
     var tlEl = document.getElementById("subTranslate");
-    var tl = (tlEl && tlEl.value) || "";
+    // Dual language: get the ORIGINAL captions from the server (tl=""), then add the
+    // translation as a second line client-side (buildDualSrt). Otherwise pass tl through.
+    var tl = (window.zhDualLangOn && window.zhDualLangOn()) ? "" : ((tlEl && tlEl.value) || "");
     // Poll via the relay too — same path the job was created through, immune to the direct firewall.
     x.open("GET", RELAY_BASE + "/api.php?action=stt_poll&op=" + encodeURIComponent(op) + "&key=" + encodeURIComponent(key) + "&wpc=" + encodeURIComponent(wpc) + "&tl=" + encodeURIComponent(tl), true);
     x.onload = function () {
@@ -2628,21 +2849,45 @@
   }
 
   // Build a timecoded .srt from selected text (or whole script) and save it next to the file.
+  // Split phrase cues into N-word groups, distributing each phrase's real [start,dur] across its
+  // groups by word share — so word-by-word captions stay inside the phrase's true voice window.
+  function splitCuesToWords(cues, wpc) {
+    var out = [], i, g;
+    for (i = 0; i < cues.length; i += 1) {
+      var words = String(cues[i].text || "").split(/\s+/).filter(Boolean);
+      if (!words.length) continue;
+      var groups = [];
+      for (g = 0; g < words.length; g += wpc) groups.push(words.slice(g, g + wpc).join(" "));
+      var gdur = cues[i].dur / groups.length;
+      for (g = 0; g < groups.length; g += 1) out.push({ text: groups[g], start: cues[i].start + g * gdur, dur: Math.max(0.25, gdur) });
+    }
+    return out;
+  }
   function generateSubtitles() {
     var source = getSelectedText().trim();
     if (!source) source = (els.documentSurface.innerText || "").trim();
     if (!source) { showStatus("Open or select script text first.", true, true); return; }
 
-    var lines = splitIntoCues(source);
-    if (!lines.length) { showStatus("No text to caption.", true, true); return; }
-
-    var baseDur = parseFloat(els.durationInput && els.durationInput.value) || 0;
-    var cues = [], cursor = 0;
-    for (var i = 0; i < lines.length; i += 1) {
-      // reading-speed estimate (~14 chars/sec) unless user forced a fixed Dur
-      var dur = baseDur >= 0.5 ? baseDur : Math.max(1.2, Math.min(7, lines[i].length / 14));
-      cues.push({ text: lines[i], start: cursor, dur: dur });
-      cursor += dur;
+    var wpc = parseInt((document.getElementById("wordsPerCue") || {}).value || "0", 10) || 0;
+    var cues;
+    // If the opened file is an SRT, use its REAL timecodes (synced to voice) instead of estimating.
+    // Split each cue to N words (Words/line) so word-by-word stays on the phrase's real time window.
+    var srtCues = state.srtRaw ? srtToCues(state.srtRaw) : [];
+    if (srtCues.length) {
+      cues = srtCues.map(function (c) { return { text: c.text, start: c.start, dur: Math.max(0.4, c.end - c.start) }; });
+      if (wpc >= 1 && wpc <= 4) cues = splitCuesToWords(cues, wpc);
+      showStatus("Captions placed on the SRT's real timing" + (wpc ? " (" + wpc + " word/line)" : "") + ".", false, true);
+    } else {
+      var lines = splitIntoCues(source);
+      if (!lines.length) { showStatus("No text to caption.", true, true); return; }
+      var baseDur = parseFloat(els.durationInput && els.durationInput.value) || 0;
+      cues = []; var cursor = 0;
+      for (var i = 0; i < lines.length; i += 1) {
+        // reading-speed estimate (~14 chars/sec) unless user forced a fixed Dur
+        var dur = baseDur >= 0.5 ? baseDur : Math.max(1.2, Math.min(7, lines[i].length / 14));
+        cues.push({ text: lines[i], start: cursor, dur: dur });
+        cursor += dur;
+      }
     }
 
     // After Effects has no caption track — build timed subtitle text layers instead.
@@ -2955,7 +3200,7 @@
     function renderPay(plan) {
       box.innerHTML = header()
         + '<div style="background:#241c05;border:1px solid #6b520a;border-radius:10px;padding:11px;margin-bottom:11px;">'
-        + '<div style="font-weight:700;color:#fff;">' + plan.label + ' — <span style="color:#ffd34d;">৳' + plan.price + '</span></div>'
+        + '<div style="font-weight:700;color:#fff;">' + plan.label + ' — <span style="color:#ffd34d;">৳' + escapeHtml(String(plan.price)) + '</span></div>'
         + '<div id="ssUpPayInfo" style="color:#cbb; font-size:12px; margin-top:7px;">Loading payment number…</div></div>'
         + '<label style="color:#aaa;">Transaction ID (from bKash/Nagad)</label>'
         + '<input id="ssUpTrx" type="text" placeholder="e.g. 9KZ7A1B2C3" style="width:100%;margin:5px 0 10px;padding:8px;border-radius:8px;border:1px solid #555;background:#111;color:#fff;">'
@@ -2988,11 +3233,11 @@
               txt = escapeHtml(j.raw).replace(/\n/g, "<br>");
             }
           } catch (e) {}
-          info.innerHTML = "Send <b style='color:#ffd34d;'>৳" + plan.price + "</b> (Send Money) to:<br>" + txt + "<br><span style='color:#9a9;'>Then paste the Transaction ID below.</span>";
+          info.innerHTML = "Send <b style='color:#ffd34d;'>৳" + escapeHtml(String(plan.price)) + "</b> (Send Money) to:<br>" + txt + "<br><span style='color:#9a9;'>Then paste the Transaction ID below.</span>";
         };
-        pq.onerror = pq.ontimeout = function () { info.innerHTML = "Send <b style='color:#ffd34d;'>৳" + plan.price + "</b> to:<br>" + fb; };
+        pq.onerror = pq.ontimeout = function () { info.innerHTML = "Send <b style='color:#ffd34d;'>৳" + escapeHtml(String(plan.price)) + "</b> to:<br>" + fb; };
         pq.send();
-      } catch (e) { info.innerHTML = "Send ৳" + plan.price + " to:<br>" + fb; }
+      } catch (e) { info.innerHTML = "Send ৳" + escapeHtml(String(plan.price)) + " to:<br>" + fb; }
 
       box.querySelector("#ssUpSend").onclick = function () {
         var trx = box.querySelector("#ssUpTrx").value.trim();
