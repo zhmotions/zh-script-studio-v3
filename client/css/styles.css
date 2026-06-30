@@ -1288,5 +1288,6 @@ body:not(.host-ae) .v3-stylegroup{ display:none; }
 .bnc-num{ width:58px; background:var(--v-card,#1c1c1c); border:1px solid var(--v-line,#3a3340); color:var(--v-txt,#eee); border-radius:7px; padding:3px 6px; font-size:11px; }
 .bnc-manual{ display:inline-flex; gap:6px; }
 
-/* AE-only controls (e.g. Bounce script) — hidden in Premiere where they do nothing */
-body:not(.host-ae) .ae-only{ display:none !important; }
+/* AE-only controls (Bounce, Effect chips, Caption-style cards) — hidden ONLY when confirmed Premiere
+   (host-ppro). If host detection fails they stay visible — safer than hiding AE features inside AE. */
+body.host-ppro .ae-only{ display:none !important; }

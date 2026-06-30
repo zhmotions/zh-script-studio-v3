@@ -92,7 +92,7 @@
             <label class="dur-field" title="Seconds each title stays on screen"><span>Dur</span><input id="durationInput" type="number" min="0.5" max="60" step="0.5" value="4"><span class="dur-unit">s</span></label>
             <button id="animatedToggle" class="button" type="button" aria-pressed="false" title="ON = animated title">✨ Animated: Off</button>
           </div>
-          <div class="wpc-group v3-stylegroup" data-stylegroup="effect" title="Title / Batch animation effect — applies on insert (no toggle needed)">
+          <div class="wpc-group v3-stylegroup ae-only" data-stylegroup="effect" title="Title / Batch animation effect (After Effects only — Premiere uses the MOGRT template's animation)">
             <span>Effect</span>
             <input id="effectStyle" type="hidden" value="pop">
             <button type="button" class="cstyle-btn active" data-style="pop">Pop</button>
@@ -170,7 +170,7 @@
             <button type="button" class="wpc-btn" data-wpc="2">2</button>
             <button type="button" class="wpc-btn" data-wpc="3">3</button>
           </div>
-          <div class="v3-stylegroup ccard-group" data-stylegroup="style">
+          <div class="v3-stylegroup ccard-group ae-only" data-stylegroup="style">
             <div class="ccard-head"><span>Caption Style</span><span class="ccard-fire">🔥 Viral-ready</span></div>
             <input id="captionStyle" type="hidden" value="pop">
             <div class="ccard-grid">

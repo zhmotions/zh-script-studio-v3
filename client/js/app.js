@@ -71,7 +71,7 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.2.10";
+  var EXT_VERSION = "3.2.15";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
@@ -258,10 +258,14 @@
       try {
         var appId = (env && env.appName) || (state.csInterface.getApplicationID && state.csInterface.getApplicationID()) || "";
         state.hostIsAE = /AEFT/i.test(String(appId));
-        // v3: the animation Style/Effect chips only do anything in After Effects (text
-        // animators). In Premiere the title/subtitle animation comes from the MOGRT
-        // template, so hide the Effect chips there (use the Templates dock instead).
-        try { document.body.classList.toggle("host-ae", !!state.hostIsAE); } catch (eHb) {}
+        // v3: the animation Style/Effect chips + caption-style cards only do anything in After Effects
+        // (AE text layers). In Premiere the animation comes from the MOGRT template, so AE-only controls
+        // (.ae-only) are hidden — but ONLY when we've CONFIRMED Premiere (host-ppro). If detection ever
+        // fails we leave them visible (safer than hiding AE features inside AE).
+        try {
+          document.body.classList.toggle("host-ae", !!state.hostIsAE);
+          document.body.classList.toggle("host-ppro", /PPRO/i.test(String(appId)));
+        } catch (eHb) {}
       } catch (eId) {}
 
       state.csInterface.addEventListener(
@@ -2697,9 +2701,9 @@
     var ap = normalizeLocalFilePath((state.prefs && state.prefs.activeTemplatePath) || "");
     var style = (window.zhCaptionStyle ? window.zhCaptionStyle() : ((state.prefs && state.prefs.aeAnimStyle) || "pop"));
     return encodeURIComponent(JSON.stringify({
-      // The caption-style CARD is the control now — every style except "Clean"/"None" animates,
-      // regardless of the (titles) Animated toggle. Clean = minimal subtle fade.
-      animated: style !== "clean" && style !== "none",
+      // Every caption style animates (Clean = plain fade-in via applyAEAnim's default branch — no
+      // scale pop, so it's visibly different). Only "none" stays fully static.
+      animated: style !== "none",
       style: style,
       ffx: /\.ffx$/i.test(ap) ? ap : ""
     }));

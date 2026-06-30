@@ -505,24 +505,7 @@
     } catch (e) {}
   }
 
-  // Auto power-words for the Hormozi CAPTION style (no manual marking on transcribed captions).
-  // Returns the words AS THEY APPEAR in the text (so applyKeywordHighlight's indexOf matches case).
-  function zhPowerWords(text) {
-    var t = String(text || "");
-    var en = { free:1, now:1, "new":1, best:1, secret:1, fast:1, easy:1, money:1, more:1, never:1, stop:1, huge:1, instantly:1, proven:1, guaranteed:1, results:1, mistake:1, wrong:1, first:1, only:1, today:1, win:1, viral:1, profit:1, clients:1, sales:1, growth:1, million:1, "double":1, biggest:1, important:1 };
-    var bn = ["ফ্রি", "নতুন", "সেরা", "এখন", "টাকা", "কখনো", "সবচেয়ে", "দ্রুত", "সহজ", "ভুল", "সঠিক", "আজ", "লাভ", "গ্রাহক", "সেলস", "মিলিয়ন", "ডাবল", "গুরুত্বপূর্ণ"];
-    var out = [], seen = {}, i;
-    var toks = t.split(/\s+/);
-    for (i = 0; i < toks.length; i += 1) {
-      var w = toks[i].replace(/^[^A-Za-z0-9ঀ-৿]+/, "").replace(/[^A-Za-z0-9ঀ-৿]+$/, "");
-      if (!w) continue;
-      var lw = w.toLowerCase();
-      if (en[lw] && !seen[lw]) { out.push(w); seen[lw] = 1; }
-    }
-    for (i = 0; i < bn.length; i += 1) { if (t.indexOf(bn[i]) >= 0 && !seen[bn[i]]) { out.push(bn[i]); seen[bn[i]] = 1; } }
-    return out;
-  }
-  // Hormozi keyword highlight: colour the given words inside a text layer yellow.
+  // Keyword highlight: colour the given words inside a text layer yellow.
   // PRIMARY = the modern per-character CharacterRange API (AE 24.3+/2026) — sets the keyword chars'
   // fill directly, RELIABLE (no text-animator selector, which is the flaky path that broke slide).
   // FALLBACK (old AE) = a character-index Range Selector animator.
@@ -698,12 +681,18 @@
             td.fontSize = 48; td.applyFill = true; td.fillColor = [1, 1, 1];
             try { td.justification = ParagraphJustification.CENTER_JUSTIFY; } catch (eJ) {}
             applyScriptFont(td, safeString(c.text));
-            // Hormozi look: UPPERCASE + white fill + thick black stroke (the defining captionbolt style).
+            // Caption-style colour/treatment — set on the WHOLE TextDocument (reliable; no per-char
+            // animator/CharacterRange which is flaky across AE builds). This is what makes each style
+            // visibly DIFFERENT (not just all "pop").
             if (sOpts.style === "hormozi") {
+              // Hormozi: UPPERCASE + YELLOW fill + thick black stroke.
               try { td.text = safeString(c.text).toUpperCase(); } catch (eUc) {}
               td.fontSize = 64;
-              td.applyFill = true; td.fillColor = [1, 1, 1];
+              td.applyFill = true; td.fillColor = [1, 0.86, 0.18];   // yellow
               try { td.applyStroke = true; td.strokeColor = [0, 0, 0]; td.strokeWidth = Math.max(5, td.fontSize * 0.14); td.strokeOverFill = false; } catch (eStk) {}
+            } else if (sOpts.style === "karaoke") {
+              // Karaoke: GOLD word (each cue is 1 word via wpc=1 → reads word-by-word).
+              td.applyFill = true; td.fillColor = [1, 0.78, 0.12];
             }
             layer.property("Source Text").setValue(td);
           } catch (eS) {}
@@ -715,13 +704,13 @@
             layer.property("Transform").property("Anchor Point").setValue([r.left + r.width / 2, r.top + r.height / 2]);
             layer.property("Transform").property("Position").setValue([comp.width / 2, comp.height * 0.85]);
           } catch (eP) {}
-          // SELECTED animation: a chosen .ffx preset wins; else the chosen built-in style.
-          var animDone = false;
-          if (sFfx) { animDone = applyPresetAt(comp, layer, sFfx, st); }
-          if (!animDone && sOpts.animated) { applyAEAnim(layer, sOpts.style || "pop", st, outP); }
-          // Hormozi caption style → auto-highlight power words in this caption (yellow keyword pop).
-          if (!animDone && sOpts.style === "hormozi") {
-            try { applyKeywordHighlight(layer, zhPowerWords(safeString(c.text)), "#ffe14d"); } catch (eHz) {}
+          // The chosen caption STYLE wins (Karaoke/Hormozi/Pop/Clean). Only fall back to a custom
+          // .ffx template when style = "none" — otherwise an active title template (e.g. New Glow)
+          // would hijack every caption and the viral style would never show.
+          if (sOpts.style === "none") {
+            if (sFfx) applyPresetAt(comp, layer, sFfx, st);
+          } else if (sOpts.animated) {
+            applyAEAnim(layer, sOpts.style || "pop", st, outP);
           }
           made += 1;
         }
