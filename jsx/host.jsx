@@ -411,6 +411,14 @@
     try { var op = tr.property("Opacity"); op.setValueAtTime(t, 0); op.setValueAtTime(t + 0.10, 100); try { easeKeys(op); } catch (eE) {} } catch (eO) {}
   }
 
+  // Set a Range Selector "Advanced" property (Based On / Units / Mode / Shape / Ease). These live under
+  // the "ADBE Text Range Advanced" subgroup — try that first, then the selector directly (version-safe).
+  function selAdv(sel, matchName, val) {
+    try { sel.property("ADBE Text Range Advanced").property(matchName).setValue(val); return true; } catch (e) {}
+    try { sel.property(matchName).setValue(val); return true; } catch (e2) {}
+    return false;
+  }
+
   // Apply a built-in animation STYLE to a text layer between t (in) and outP (out).
   // Position moves are relative to wherever the layer already sits (so it works for centred
   // titles AND bottom subtitles). Returns nothing; always wrapped so a failure is harmless.
@@ -419,7 +427,10 @@
       var tr = layer.property("Transform");
       var op = tr.property("Opacity"), sc = tr.property("Scale"), pos = tr.property("Position");
       var base = pos.value;
-      var inT = 0.40, outT = 0.30;
+      // Scale the in/out timing to the caption length — word-by-word captions are ~0.3s, so a fixed
+      // 0.4s pop would run PAST the layer's end (invisible). Cap to a fraction of the on-screen time.
+      var span = Math.max(0.12, (outP - t));
+      var inT = Math.min(0.40, span * 0.55), outT = Math.min(0.30, span * 0.35);
       style = String(style || "fade").toLowerCase();
       if (style === "none") return;   // deliberately static title — no animation
 
@@ -491,10 +502,62 @@
         sc.setValueAtTime(t, sAt(82)); sc.setValueAtTime(t + inT, sAt(100));
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
       } else if (style === "hormozi") {
-        // Hormozi caption: a punchy scale-pop in. The yellow keyword highlight is added separately
-        // (addAESubtitles → applyKeywordHighlight on the auto-detected power words).
-        sc.setValueAtTime(t, sAt(62)); sc.setValueAtTime(t + inT, sAt(108)); sc.setValueAtTime(t + inT + 0.1, sAt(100));
+        // LOCKED to the user's hand-built comp values: base text YELLOW; a Fill-Color animator paints
+        // the un-revealed words WHITE; a Range Selector (Based On=Words, Ease Low=100, Percentage, Add,
+        // Square) sweeps Start 0→100 so the WHITE shrinks left→right → words turn yellow word-by-word.
+        // Advanced props set via selAdv (the "ADBE Text Range Advanced" subgroup). + scale pop.
+        try {
+          var hzAnims = layer.property("ADBE Text Properties").property("ADBE Text Animators");
+          var hzAg = hzAnims.addProperty("ADBE Text Animator");
+          hzAg.property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color").setValue([1, 1, 1]); // un-revealed = WHITE
+          var hzSel = hzAg.property("ADBE Text Selectors").addProperty("ADBE Text Selector");
+          selAdv(hzSel, "ADBE Text Range Type2", 3);    // Based On = Words
+          selAdv(hzSel, "ADBE Text Range Units", 1);     // Percentage
+          selAdv(hzSel, "ADBE Text Selector Mode", 1);   // Add
+          selAdv(hzSel, "ADBE Text Range Shape", 1);     // Square
+          selAdv(hzSel, "ADBE Text Range Ease High", 0);
+          selAdv(hzSel, "ADBE Text Range Ease Low", 100);
+          var hzStart = hzSel.property("ADBE Text Percent Start");
+          var hzRev = Math.min(Math.max(0.5, (outP - t) * 0.7), 2.2);
+          hzStart.setValueAtTime(t, 0);             // all words selected → all white
+          hzStart.setValueAtTime(t + hzRev, 100);   // none selected → all yellow (left→right reveal)
+          try { easeKeys(hzStart); } catch (eK) {}
+        } catch (eHz) {}
+        sc.setValueAtTime(t, sAt(70)); sc.setValueAtTime(t + inT, sAt(106)); sc.setValueAtTime(t + inT + 0.1, sAt(100));
         op.setValueAtTime(t, 0); op.setValueAtTime(t + 0.12, 100);
+      } else if (style === "beasty") {
+        // Beasty: big punch.
+        sc.setValueAtTime(t, sAt(45)); sc.setValueAtTime(t + inT, sAt(118)); sc.setValueAtTime(t + inT + 0.1, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + 0.1, 100);
+      } else if (style === "neon") {
+        // Neon: add a Glow effect + scale-fade in.
+        try {
+          var npar = layer.property("ADBE Effect Parade");
+          if (npar && (npar.canAddProperty ? npar.canAddProperty("ADBE Glo2") : true)) {
+            var nglo = npar.addProperty("ADBE Glo2");
+            try { nglo.property("ADBE Glo2-0002").setValue(45); } catch (eNt) {}
+            try { nglo.property("ADBE Glo2-0003").setValue(42); } catch (eNr) {}
+            try { nglo.property("ADBE Glo2-0004").setValue(2.2); } catch (eNi) {}
+          }
+        } catch (eNg) {}
+        sc.setValueAtTime(t, sAt(82)); sc.setValueAtTime(t + inT, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
+      } else if (style === "chrome") {
+        // Chrome: metallic Bevel Alpha edge + scale-fade in.
+        try { var cpar = layer.property("ADBE Effect Parade"); if (cpar && (cpar.canAddProperty ? cpar.canAddProperty("ADBE Bevel Alpha") : true)) { var bv = cpar.addProperty("ADBE Bevel Alpha"); try { bv.property("ADBE Bevel Alpha-0001").setValue(3); } catch (eBd) {} try { bv.property("ADBE Bevel Alpha-0003").setValue(1.4); } catch (eBl) {} } } catch (eCb) {}
+        sc.setValueAtTime(t, sAt(84)); sc.setValueAtTime(t + inT, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
+      } else if (style === "spotlight") {
+        // Spotlight: bright Glow + a bigger scale punch (word "lit up").
+        try { var spar = layer.property("ADBE Effect Parade"); if (spar && (spar.canAddProperty ? spar.canAddProperty("ADBE Glo2") : true)) { var sg = spar.addProperty("ADBE Glo2"); try { sg.property("ADBE Glo2-0002").setValue(35); } catch (eSt) {} try { sg.property("ADBE Glo2-0003").setValue(55); } catch (eSr) {} try { sg.property("ADBE Glo2-0004").setValue(2.6); } catch (eSi) {} } } catch (eSg) {}
+        sc.setValueAtTime(t, sAt(55)); sc.setValueAtTime(t + inT, sAt(116)); sc.setValueAtTime(t + inT + 0.1, sAt(100));
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + 0.1, 100);
+      } else if (style === "letterrise") {
+        // Whole-WORD rise (wpc=1 → one word per caption = reads word-by-word). Whole-layer position +
+        // opacity, NO text-animator selector — a selector splits glyphs + breaks Bengali conjuncts.
+        pos.setValueAtTime(t, pAt(0, 70)); pos.setValueAtTime(t + inT, pAt(0, 0)); easeKeys(pos);
+        op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
+        sc.setValueAtTime(t, sAt(88)); sc.setValueAtTime(t + inT, sAt(100));
       } else { // fade / clean — minimal, no scale punch
         op.setValueAtTime(t, 0); op.setValueAtTime(t + inT, 100);
       }
@@ -504,6 +567,7 @@
       try { if (pos.numKeys) easeKeys(pos); } catch (e3) {}
     } catch (e) {}
   }
+
 
   // Keyword highlight: colour the given words inside a text layer yellow.
   // PRIMARY = the modern per-character CharacterRange API (AE 24.3+/2026) — sets the keyword chars'
@@ -658,6 +722,7 @@
       try {
         var cues = JSON.parse(decodeURIComponent(safeString(encCues)));
         if (!cues || !cues.length) return json(false, "No subtitle text.");
+        cues.sort(function (a, b) { return (parseFloat(a.start) || 0) - (parseFloat(b.start) || 0); });   // time order → next-start clamp is correct (no overlap)
         if (!app.project || !(app.project.activeItem instanceof CompItem)) {
           return json(false, "Open an active composition first.");
         }
@@ -685,19 +750,40 @@
             // animator/CharacterRange which is flaky across AE builds). This is what makes each style
             // visibly DIFFERENT (not just all "pop").
             if (sOpts.style === "hormozi") {
-              // Hormozi: UPPERCASE + YELLOW fill + thick black stroke.
-              try { td.text = safeString(c.text).toUpperCase(); } catch (eUc) {}
+              // Hormozi base = WHITE (a yellow duplicate + Linear Wipe reveals it). UPPERCASE only for
+              // Latin — never uppercase Bengali (no case + can disturb conjunct shaping).
+              if (!/[ঀ-৿]/.test(safeString(c.text))) { try { td.text = safeString(c.text).toUpperCase(); } catch (eUc) {} }
               td.fontSize = 64;
-              td.applyFill = true; td.fillColor = [1, 0.86, 0.18];   // yellow
-              try { td.applyStroke = true; td.strokeColor = [0, 0, 0]; td.strokeWidth = Math.max(5, td.fontSize * 0.14); td.strokeOverFill = false; } catch (eStk) {}
+              td.applyFill = true; td.fillColor = [1, 0.86, 0.18];   // YELLOW base (a white duplicate wipes away to reveal it)
+              try { td.applyStroke = true; td.strokeColor = [0, 0, 0]; td.strokeWidth = Math.max(3, td.fontSize * 0.07); td.strokeOverFill = false; } catch (eStk) {}
             } else if (sOpts.style === "karaoke") {
               // Karaoke: GOLD word (each cue is 1 word via wpc=1 → reads word-by-word).
               td.applyFill = true; td.fillColor = [1, 0.78, 0.12];
+            } else if (sOpts.style === "beasty") {
+              // Beasty (MrBeast): each word a bright colour, cycled by cue index + UPPERCASE + stroke.
+              var bpal = [[1, 0.85, 0.1], [0.3, 1, 0.45], [0.35, 0.8, 1], [1, 0.45, 0.75]];
+              try { td.text = safeString(c.text).toUpperCase(); } catch (eBu) {}
+              td.fontSize = 62; td.applyFill = true; td.fillColor = bpal[i % bpal.length];
+              try { td.applyStroke = true; td.strokeColor = [0, 0, 0]; td.strokeWidth = Math.max(3, td.fontSize * 0.07); td.strokeOverFill = false; } catch (eBs) {}
+            } else if (sOpts.style === "neon") {
+              // Neon: bright green-cyan (glow added in applyAEAnim).
+              td.applyFill = true; td.fillColor = [0.37, 1, 0.65];
+            } else if (sOpts.style === "chrome") {
+              // Chrome: light silver fill (+ Bevel Alpha metallic edge in applyAEAnim).
+              td.applyFill = true; td.fillColor = [0.82, 0.85, 0.92];
+              try { td.applyStroke = true; td.strokeColor = [0.15, 0.16, 0.2]; td.strokeWidth = Math.max(3, td.fontSize * 0.06); td.strokeOverFill = false; } catch (eCh) {}
             }
             layer.property("Source Text").setValue(td);
+            // Fill & Stroke → "All Fills Over All Strokes" (2): fills (yellow base + white animator)
+            // render ABOVE the stroke → clean outline, stroke never covers the coloured fill.
+            try { layer.property("ADBE Text Properties").property("ADBE Text More Options").property("ADBE Text Render Order").setValue(2); } catch (eRo) {}
           } catch (eS) {}
           var st = base + (parseFloat(c.start) || 0);
-          var outP = Math.min(comp.duration, st + (parseFloat(c.dur) || 2));
+          // End this caption no later than the NEXT one starts → no two captions on screen at once
+          // (word-by-word words are closer than the min dur, which otherwise overlaps/stacks them).
+          var nextStart = (i + 1 < cues.length) ? (base + (parseFloat(cues[i + 1].start) || 0)) : Number.MAX_VALUE;
+          var outP = Math.min(comp.duration, st + (parseFloat(c.dur) || 2), nextStart);
+          if (outP <= st) outP = Math.min(comp.duration, st + 0.2);   // safety: never zero/negative length
           layer.startTime = st; layer.inPoint = st; layer.outPoint = outP;
           try {
             var r = layer.sourceRectAtTime(st, false);

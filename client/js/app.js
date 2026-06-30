@@ -61,6 +61,7 @@
       }
     }
     try { checkForUpdate(); } catch (e) { /* never block the panel */ }
+    try { sweepTempFiles(); } catch (e) { /* clear leftover temp WAV/SRT so Mac cleaners don't flag junk */ }
     try { setTimeout(function () { try { maybeAskReview(); } catch (e) {} }, 6000); } catch (e) {}
     // Live quota refresh: when the admin raises a key's minutes, the badge should
     // update without reopening the panel. Re-fetch on focus / when it becomes visible.
@@ -71,7 +72,7 @@
   }
 
   // This panel's version — keep in sync with CSXS/manifest.xml ExtensionBundleVersion.
-  var EXT_VERSION = "3.2.15";
+  var EXT_VERSION = "3.5.6";
 
   // API base. Normally the site directly. If the host firewall (lsrecaptcha) challenges
   // this client's IP, we transparently switch to a Cloudflare Worker relay that forwards
@@ -2100,7 +2101,9 @@
     var html = items.map(function (it, i) {
       var thumb = it.preview
         ? '<img src="' + escapeHtml(it.preview) + '" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'🎬\'">'
-        : '🎬';
+        : ((it.isVideo && it.hover)   // no still image but a video preview → loop it as the thumbnail
+            ? '<video src="' + escapeHtml(it.hover) + '" muted loop autoplay playsinline style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'🎬\'"></video>'
+            : '🎬');
       var addBtn = it.online
         ? '<button type="button" class="tplx-add" data-dl="' + i + '">Add ↓</button>'
         : '<button type="button" class="tplx-add" data-add="' + escapeHtml(it.path) + '">' + (active === it.path ? "✓ Active" : "Add ↓") + '</button>';
@@ -2145,21 +2148,29 @@
   // instead of only opening the separate modal. Tries direct → relay (relay bypasses lsrecaptcha).
   function loadOnlineTemplates(force) {
     if (tplxOnlineLoaded && !force) { renderTemplateGrid(); return; }
-    var bases = [DIRECT_BASE, RELAY_BASE];
-    (function tryBase(idx) {
-      if (idx >= bases.length) { tplxOnlineLoaded = true; renderTemplateGrid(); return; }
+    // AUTO catalog: api.php?action=ss_templates scans the server's /templates/ folder → no manifest
+    // editing (just drop a file on the server). Falls back to a static manifest.json if the endpoint
+    // isn't there. Each [base × path] is tried in order until one returns JSON.
+    var bases = [DIRECT_BASE, RELAY_BASE], paths = ["/api.php?action=ss_templates&_=", "/templates/manifest.json?_="];
+    var tries = [];
+    for (var b = 0; b < bases.length; b += 1) for (var p = 0; p < paths.length; p += 1) tries.push([bases[b], paths[p]]);
+    (function attempt(idx) {
+      if (idx >= tries.length) { tplxOnlineLoaded = true; renderTemplateGrid(); return; }
+      var base = tries[idx][0], path = tries[idx][1];
       var x = new XMLHttpRequest();
-      try { x.open("GET", bases[idx] + "/templates/manifest.json?_=" + Date.now(), true); } catch (e) { tryBase(idx + 1); return; }
+      try { x.open("GET", base + path + Date.now(), true); } catch (e) { attempt(idx + 1); return; }
       x.timeout = 10000;
       x.onload = function () {
-        var j; try { j = JSON.parse(x.responseText); } catch (e) { tryBase(idx + 1); return; }
-        TPL_BASE = bases[idx];   // serve preview assets from the base that worked
-        tplxOnline = (j && j.templates) || [];   // keep the FULL manifest; host filter applied in templateItems
+        var j; try { j = JSON.parse(x.responseText); } catch (e) { attempt(idx + 1); return; }
+        var list = (j && j.templates) || [];
+        if (!list.length) { attempt(idx + 1); return; }   // empty → try next source
+        TPL_BASE = base;   // serve preview assets from the base that worked
+        tplxOnline = list;
         tplxOnlineLoaded = true;
         renderTemplateGrid();
       };
-      x.onerror = x.ontimeout = function () { tryBase(idx + 1); };
-      try { x.send(); } catch (e) { tryBase(idx + 1); }
+      x.onerror = x.ontimeout = function () { attempt(idx + 1); };
+      try { x.send(); } catch (e) { attempt(idx + 1); }
     })(0);
   }
   function wireTemplateTab() {
@@ -2240,6 +2251,20 @@
 
   // Stamp the real build version into the UI (header badge + Help modal) so the installed version is
   // always visible — no more guessing whether a new .zxp actually loaded vs a cached old panel.
+  // Sweep our own leftover temp files (zh-stt16-*.wav downsamples, zh-subs-*.srt) older than 1h from
+  // tmpdir. They're normally deleted right after use, but a crash/abort can orphan one — and an
+  // accumulating pile is what makes Mac cleaner apps flag the panel. Best-effort, never throws.
+  function sweepTempFiles() {
+    var nr = getNodeRequire(); if (!nr) return;
+    var fs = nr("fs"), pathM = nr("path"), dir = nr("os").tmpdir();
+    var now = Date.now(), names = fs.readdirSync(dir);
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      if (!/^zh-stt16-.*\.wav$/.test(n) && !/^zh-subs-.*\.srt$/.test(n)) continue;
+      try { var fp = pathM.join(dir, n); if (now - fs.statSync(fp).mtimeMs > 3600000) fs.unlinkSync(fp); } catch (e) {}
+    }
+  }
+
   function stampVersion() {
     var v = "v" + EXT_VERSION;
     var ver = document.querySelector(".ver"); if (ver) ver.textContent = v;
@@ -2513,6 +2538,14 @@
       }
       var buf = nr("fs").readFileSync(small);
       var blob = new Blob([buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)], { type: "audio/wav" });
+      // Delete the temp WAVs now they're in memory — the downsampled copy AND the AE export. Left
+      // behind they pile up in tmpdir and Mac cleaner apps flag them as junk/cache. Only touch files
+      // under tmpdir (never a user file).
+      try {
+        var tmp = nr("os").tmpdir();
+        if (small && small.indexOf(tmp) === 0) nr("fs").unlinkSync(small);
+        if (path && path !== small && path.indexOf(tmp) === 0) nr("fs").unlinkSync(path);
+      } catch (eDel) {}
       uploadAudioForSubtitle(blob, name);
     } catch (e) { showStatus("Could not read the exported audio: " + e.message, true); }
   }

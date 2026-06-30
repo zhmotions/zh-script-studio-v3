@@ -73,7 +73,9 @@
           activate(btns, b);
           var v = b.getAttribute("data-style");
           if (hidden) hidden.value = v;
-          if (v === "karaoke") {
+          if (v === "karaoke" || v === "beasty" || v === "spotlight" || v === "letterrise") {
+            // 1 word per caption (Hormozi keeps PHRASES — its Range Selector turns words yellow
+            // one-by-one inside the phrase, matching the user's hand-built comp).
             var w1 = document.querySelector('.wpc-btn[data-wpc="1"]');
             if (w1) w1.click();
           }
